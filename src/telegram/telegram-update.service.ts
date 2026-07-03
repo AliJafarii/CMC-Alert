@@ -310,6 +310,12 @@ export class TelegramUpdateService implements OnModuleInit {
           "مبلغ خرید 0.05 سولانا",
           "مبلغ خرید 0.1 سولانا",
         ],
+        [
+          "نقدینگی 500 دلار",
+          "نقدینگی 1000 دلار",
+          "نقدینگی 5000 دلار",
+        ],
+        ["نقدینگی 10000 دلار"],
       ],
       resize_keyboard: true,
       one_time_keyboard: false,
@@ -376,6 +382,10 @@ export class TelegramUpdateService implements OnModuleInit {
       "مبلغ خرید 0.01 سولانا",
       "مبلغ خرید 0.05 سولانا",
       "مبلغ خرید 0.1 سولانا",
+      "نقدینگی 500 دلار",
+      "نقدینگی 1000 دلار",
+      "نقدینگی 5000 دلار",
+      "نقدینگی 10000 دلار",
     ].includes(text);
   }
 
@@ -402,6 +412,12 @@ export class TelegramUpdateService implements OnModuleInit {
 
     if (amountMatch) {
       settings.solAmount = Number(amountMatch[1]);
+    }
+
+    const liquidityMatch = text.match(/نقدینگی ([0-9.]+) دلار/);
+
+    if (liquidityMatch) {
+      settings.minLiquidityUsd = Number(liquidityMatch[1]);
     }
 
     settings.mode = "dry-run";

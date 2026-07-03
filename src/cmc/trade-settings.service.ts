@@ -36,12 +36,15 @@ export class TradeSettingsService {
       `وضعیت بررسی خرید تست: ${settings.enabled ? "فعال" : "غیرفعال"}`,
       `حالت اجرا: ${settings.mode}`,
       `مبلغ هر خرید: ${settings.solAmount} SOL`,
+      `مبلغ هر خرید اتریوم: ${settings.ethAmount} ETH`,
       `ولیت: ${settings.walletAddress || "تنظیم نشده"}`,
+      `ولت اتریوم: ${settings.ethWalletAddress || "تنظیم نشده"}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd} دلار`,
-      `شبکه فعال: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
+      `شبکه‌های فعال: ${settings.enabledChains.join(", ")}`,
       `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
       `آستانه خرید خودکار: ${-Math.abs(settings.autoBuyDropThresholdPercent)}%`,
       `DEXهای مجاز سولانا: ${settings.allowedSolanaDexIds.join(", ")}`,
+      `DEXهای مجاز اتریوم: ${settings.allowedEthereumDexIds.join(", ")}`,
     ].join("\n");
   }
 
@@ -50,8 +53,14 @@ export class TradeSettingsService {
       enabled: this.getBoolean("TRADE_VALIDATION_ENABLED", false),
       mode: "dry-run",
       solAmount: this.getNumber("TRADE_SOL_AMOUNT", 0.01, 0.001, 10),
+      ethAmount: this.getNumber("TRADE_ETH_AMOUNT", 0.002, 0.0001, 10),
       walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
+      ethWalletAddress: this.configService.get<string>("ETH_WALLET_ADDRESS") ?? "",
       solanaOnly: this.getBoolean("TRADE_SOLANA_ONLY", true),
+      enabledChains: this.getList("TRADE_ENABLED_CHAINS", [
+        "solana",
+        "ethereum",
+      ]),
       minLiquidityUsd: this.getNumber("TRADE_MIN_LIQUIDITY_USD", 1000, 0, 1_000_000),
       showHighRiskAlerts: this.getBoolean("TRADE_SHOW_HIGH_RISK_ALERTS", true),
       autoBuyDropThresholdPercent: this.getNumber(
@@ -68,6 +77,14 @@ export class TradeSettingsService {
         "pancakeswap",
         "lifinity",
         "jupiter-studio",
+      ]),
+      allowedEthereumDexIds: this.getList("TRADE_ALLOWED_ETHEREUM_DEX_IDS", [
+        "uniswap",
+        "sushiswap",
+        "curve",
+        "balancer",
+        "pancakeswap",
+        "shibaswap",
       ]),
     };
   }

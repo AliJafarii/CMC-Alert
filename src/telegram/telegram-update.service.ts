@@ -49,12 +49,16 @@ interface TradeSettingsState {
   enabled?: boolean;
   mode?: "dry-run";
   solAmount?: number;
+  ethAmount?: number;
   walletAddress?: string;
+  ethWalletAddress?: string;
   solanaOnly?: boolean;
+  enabledChains?: string[];
   minLiquidityUsd?: number;
   showHighRiskAlerts?: boolean;
   autoBuyDropThresholdPercent?: number;
   allowedSolanaDexIds?: string[];
+  allowedEthereumDexIds?: string[];
 }
 
 @Injectable()
@@ -313,6 +317,11 @@ export class TelegramUpdateService implements OnModuleInit {
           "مبلغ خرید 0.1 سولانا",
         ],
         [
+          "مبلغ خرید 0.001 اتریوم",
+          "مبلغ خرید 0.002 اتریوم",
+          "مبلغ خرید 0.005 اتریوم",
+        ],
+        [
           "نقدینگی 500 دلار",
           "نقدینگی 1000 دلار",
           "نقدینگی 5000 دلار",
@@ -389,6 +398,9 @@ export class TelegramUpdateService implements OnModuleInit {
       "مبلغ خرید 0.01 سولانا",
       "مبلغ خرید 0.05 سولانا",
       "مبلغ خرید 0.1 سولانا",
+      "مبلغ خرید 0.001 اتریوم",
+      "مبلغ خرید 0.002 اتریوم",
+      "مبلغ خرید 0.005 اتریوم",
       "نقدینگی 500 دلار",
       "نقدینگی 1000 دلار",
       "نقدینگی 5000 دلار",
@@ -424,6 +436,12 @@ export class TelegramUpdateService implements OnModuleInit {
       settings.solAmount = Number(amountMatch[1]);
     }
 
+    const ethAmountMatch = text.match(/مبلغ خرید ([0-9.]+) اتریوم/);
+
+    if (ethAmountMatch) {
+      settings.ethAmount = Number(ethAmountMatch[1]);
+    }
+
     const liquidityMatch = text.match(/نقدینگی ([0-9.]+) دلار/);
 
     if (liquidityMatch) {
@@ -451,8 +469,11 @@ export class TelegramUpdateService implements OnModuleInit {
       enabled: false,
       mode: "dry-run",
       solAmount: 0.01,
+      ethAmount: 0.002,
       walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
+      ethWalletAddress: this.configService.get<string>("ETH_WALLET_ADDRESS") ?? "",
       solanaOnly: true,
+      enabledChains: ["solana", "ethereum"],
       minLiquidityUsd: 1000,
       showHighRiskAlerts: true,
       autoBuyDropThresholdPercent: 80,
@@ -464,6 +485,14 @@ export class TelegramUpdateService implements OnModuleInit {
         "pancakeswap",
         "lifinity",
         "jupiter-studio",
+      ],
+      allowedEthereumDexIds: [
+        "uniswap",
+        "sushiswap",
+        "curve",
+        "balancer",
+        "pancakeswap",
+        "shibaswap",
       ],
     };
 
@@ -500,12 +529,15 @@ export class TelegramUpdateService implements OnModuleInit {
       `فعال بودن: ${settings.enabled ? "بله" : "نه"}`,
       `حالت اجرا: ${settings.mode ?? "dry-run"}`,
       `مبلغ هر خرید: ${settings.solAmount ?? 0.01} SOL`,
+      `مبلغ هر خرید اتریوم: ${settings.ethAmount ?? 0.002} ETH`,
       `ولیت: ${settings.walletAddress ?? "تنظیم نشده"}`,
-      `شبکه: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
+      `ولت اتریوم: ${settings.ethWalletAddress || "تنظیم نشده"}`,
+      `شبکه‌ها: ${(settings.enabledChains ?? ["solana", "ethereum"]).join(", ")}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd ?? 1000} دلار`,
       `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
       `آستانه خرید خودکار: -${settings.autoBuyDropThresholdPercent ?? 80}%`,
-      `DEXهای مجاز: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,
+      `DEXهای مجاز سولانا: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,
+      `DEXهای مجاز اتریوم: ${(settings.allowedEthereumDexIds ?? []).join(", ")}`,
     ].join("\n");
   }
 

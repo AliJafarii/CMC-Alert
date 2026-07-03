@@ -6,12 +6,32 @@ import { CmcCryptoCurrency } from "./cmc.types";
 import { TradeSettingsService } from "./trade-settings.service";
 import { TradeSettings, TradeValidationResult } from "./trade-validation.types";
 
+type SupportedChain = "solana" | "ethereum";
+
+interface TradeTokenInfo {
+  chain: SupportedChain;
+  tokenAddress: string;
+  explorerUrl: string;
+  nativeSymbol: "SOL" | "ETH";
+  requestedAmount: number;
+  walletAddress: string;
+  allowedDexIds: string[];
+}
+
 interface CmcDetailResponse {
   data?: {
     urls?: {
       explorer?: string[];
     };
+    platforms?: CmcPlatform[];
   };
+}
+
+interface CmcPlatform {
+  contractAddress?: string;
+  contractPlatform?: string;
+  contractChainId?: number;
+  contractExplorerUrl?: string;
 }
 
 interface CoinGeckoDetailResponse {
@@ -36,10 +56,10 @@ interface DexScreenerPair {
   };
 }
 
-interface SolanaBalanceResponse {
+interface JsonRpcBalanceResponse {
   result?: {
     value?: number;
-  };
+  } | string;
   error?: {
     message?: string;
   };
@@ -58,7 +78,41 @@ interface RugCheckRisk {
   level?: string;
 }
 
-interface SolanaRiskResult {
+interface HoneypotResponse {
+  summary?: {
+    risk?: string;
+    riskLevel?: number;
+    flags?: { flag?: string; severity?: string; description?: string }[];
+  };
+  honeypotResult?: {
+    isHoneypot?: boolean;
+    honeypotReason?: string;
+  };
+  holderAnalysis?: {
+    holders?: string;
+    failed?: string;
+    successful?: string;
+  };
+  contractCode?: {
+    openSource?: boolean;
+  };
+}
+
+interface GoPlusResponse {
+  result?: Record<
+    string,
+    {
+      cannot_sell_all?: string;
+      is_open_source?: string;
+      is_honeypot?: string;
+      sell_tax?: string;
+      buy_tax?: string;
+      lp_holders?: { is_locked?: number | string }[];
+    }
+  >;
+}
+
+interface RiskResult {
   highRisk: boolean;
   summary: string;
 }
@@ -87,116 +141,86 @@ export class TradeValidationService {
     }
 
     try {
-      const explorerUrl = await this.findSolanaExplorerUrl(coin);
+      const tokenInfo = await this.findTradeTokenInfo(coin, settings);
 
-      if (!explorerUrl) {
+      if (!tokenInfo) {
         return this.reject(
           settings,
-          "لینک یا platform سولانا در منبع کوین پیدا نشد.",
+          "قرارداد قابل بررسی روی شبکه‌های فعال پیدا نشد.",
         );
       }
 
-      const tokenAddress = this.extractSolanaTokenAddress(explorerUrl);
-
-      if (!tokenAddress) {
-        return this.reject(settings, "آدرس mint سولانا از explorer قابل استخراج نبود.");
-      }
-
-      const dexResult = await this.findTrustedSolanaDex(tokenAddress, settings);
+      const dexResult = await this.findTrustedDex(tokenInfo, settings);
 
       if (!dexResult) {
         return this.reject(
           settings,
           "جفت معاملاتی معتبر با DEX مجاز و نقدینگی کافی پیدا نشد.",
-          tokenAddress,
-          explorerUrl,
+          tokenInfo.tokenAddress,
+          tokenInfo.explorerUrl,
+          tokenInfo.chain,
         );
       }
 
-      const riskResult = await this.checkSolanaRisk(tokenAddress);
+      const riskResult = await this.checkRisk(tokenInfo);
+      const priceChange1h = this.getOneHourPriceChange(coin);
+      const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
 
       if (riskResult.highRisk) {
-        const priceChange1h = this.getOneHourPriceChange(coin);
-        const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
-
         if (!settings.showHighRiskAlerts) {
           return this.reject(
             settings,
-            `ریسک سولانا قابل قبول نبود: ${riskResult.summary}`,
-            tokenAddress,
-            explorerUrl,
+            `ریسک ${this.formatChain(tokenInfo.chain)} قابل قبول نبود: ${riskResult.summary}`,
+            tokenInfo.tokenAddress,
+            tokenInfo.explorerUrl,
+            tokenInfo.chain,
           );
         }
 
-        return {
-          enabled: true,
-          accepted: true,
+        return this.result({
           decision: "high_risk",
-          reason: "کوین سولانایی است، اما ریسک قفل یا ریسک امنیتی دارد؛ فقط نمایش داده می‌شود.",
-          chain: "solana",
-          tokenAddress,
-          explorerUrl,
-          dexId: dexResult.dexId,
-          pairUrl: dexResult.url,
-          liquidityUsd: dexResult.liquidity?.usd,
-          riskSummary: riskResult.summary,
-          priceChange1hPercent: priceChange1h,
-          autoBuyDropThresholdPercent: autoBuyThreshold,
-          requestedSolAmount: settings.solAmount,
-          dryRun: true,
-        };
+          reason: `کوین روی ${this.formatChain(tokenInfo.chain)} است، اما ریسک قفل یا ریسک امنیتی دارد؛ فقط نمایش داده می‌شود.`,
+          tokenInfo,
+          dexResult,
+          riskResult,
+          priceChange1h,
+          autoBuyThreshold,
+          settings,
+        });
       }
 
-      const priceChange1h = this.getOneHourPriceChange(coin);
-      const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
       const meetsAutoBuyDrop =
         priceChange1h !== undefined && priceChange1h <= autoBuyThreshold;
 
       if (!meetsAutoBuyDrop) {
-        return {
-          enabled: true,
-          accepted: true,
+        return this.result({
           decision: "review",
           reason: `قابل بررسی برای خرید است، اما افت یک‌ساعته هنوز به آستانه خرید خودکار ${autoBuyThreshold}% نرسیده است.`,
-          chain: "solana",
-          tokenAddress,
-          explorerUrl,
-          dexId: dexResult.dexId,
-          pairUrl: dexResult.url,
-          liquidityUsd: dexResult.liquidity?.usd,
-          riskSummary: riskResult.summary,
-          priceChange1hPercent: priceChange1h,
-          autoBuyDropThresholdPercent: autoBuyThreshold,
-          requestedSolAmount: settings.solAmount,
-          dryRun: true,
-        };
+          tokenInfo,
+          dexResult,
+          riskResult,
+          priceChange1h,
+          autoBuyThreshold,
+          settings,
+        });
       }
 
-      const walletSolBalance = await this.fetchWalletBalance(settings.walletAddress);
-      const hasBalance = walletSolBalance >= settings.solAmount;
-      const decision = hasBalance ? "auto_buy" : "review";
-      const reason = hasBalance
-        ? "مجاز برای خرید خودکار است و خرید در حالت dry-run ثبت شد."
-        : "قابل بررسی برای خرید است، اما موجودی SOL برای خرید خودکار کافی نیست.";
+      const walletNativeBalance = await this.fetchWalletBalance(tokenInfo);
+      const hasBalance = walletNativeBalance >= tokenInfo.requestedAmount;
 
-      return {
-        enabled: true,
-        accepted: true,
-        decision,
-        reason,
-        chain: "solana",
-        tokenAddress,
-        explorerUrl,
-        dexId: dexResult.dexId,
-        pairUrl: dexResult.url,
-        liquidityUsd: dexResult.liquidity?.usd,
-        riskSummary: riskResult.summary,
-        priceChange1hPercent: priceChange1h,
-        autoBuyDropThresholdPercent: autoBuyThreshold,
-        walletSolBalance,
-        requestedSolAmount: settings.solAmount,
-        dryRun: true,
-      };
+      return this.result({
+        decision: hasBalance ? "auto_buy" : "review",
+        reason: hasBalance
+          ? "مجاز برای خرید خودکار است و خرید در حالت dry-run ثبت شد."
+          : `قابل بررسی برای خرید است، اما موجودی ${tokenInfo.nativeSymbol} برای خرید خودکار کافی نیست.`,
+        tokenInfo,
+        dexResult,
+        riskResult,
+        priceChange1h,
+        autoBuyThreshold,
+        settings,
+        walletNativeBalance,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Trade validation failed for ${coin.slug}: ${message}`);
@@ -216,7 +240,7 @@ export class TradeValidationService {
       `صرافی معتبر: ${result.dexId ?? "n/a"}`,
       `لینک pair: ${result.pairUrl ?? "n/a"}`,
       `نقدینگی دلاری: ${result.liquidityUsd ?? "n/a"}`,
-      `ریسک سولانا: ${result.riskSummary ?? "n/a"}`,
+      `ریسک شبکه: ${result.riskSummary ?? "n/a"}`,
       `افت یک‌ساعته: ${
         result.priceChange1hPercent === undefined
           ? "n/a"
@@ -227,10 +251,50 @@ export class TradeValidationService {
           ? "n/a"
           : `${result.autoBuyDropThresholdPercent}%`
       }`,
-      `موجودی ولت: ${result.walletSolBalance ?? "n/a"} SOL`,
-      `مبلغ خرید تست: ${result.requestedSolAmount ?? "n/a"} SOL`,
+      `موجودی ولت: ${result.walletNativeBalance ?? "n/a"} ${
+        result.nativeSymbol ?? "n/a"
+      }`,
+      `مبلغ خرید تست: ${result.requestedNativeAmount ?? "n/a"} ${
+        result.nativeSymbol ?? "n/a"
+      }`,
       `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
     ].join("\n");
+  }
+
+  private result(input: {
+    decision: "high_risk" | "review" | "auto_buy";
+    reason: string;
+    tokenInfo: TradeTokenInfo;
+    dexResult: DexScreenerPair;
+    riskResult: RiskResult;
+    priceChange1h: number | undefined;
+    autoBuyThreshold: number;
+    settings: TradeSettings;
+    walletNativeBalance?: number;
+  }): TradeValidationResult {
+    return {
+      enabled: true,
+      accepted: true,
+      decision: input.decision,
+      reason: input.reason,
+      chain: input.tokenInfo.chain,
+      tokenAddress: input.tokenInfo.tokenAddress,
+      explorerUrl: input.tokenInfo.explorerUrl,
+      dexId: input.dexResult.dexId,
+      pairUrl: input.dexResult.url,
+      liquidityUsd: input.dexResult.liquidity?.usd,
+      riskSummary: input.riskResult.summary,
+      priceChange1hPercent: input.priceChange1h,
+      autoBuyDropThresholdPercent: input.autoBuyThreshold,
+      nativeSymbol: input.tokenInfo.nativeSymbol,
+      walletNativeBalance: input.walletNativeBalance,
+      requestedNativeAmount: input.tokenInfo.requestedAmount,
+      walletSolBalance:
+        input.tokenInfo.chain === "solana" ? input.walletNativeBalance : undefined,
+      requestedSolAmount:
+        input.tokenInfo.chain === "solana" ? input.tokenInfo.requestedAmount : undefined,
+      dryRun: true,
+    };
   }
 
   private formatStatus(result: TradeValidationResult): string {
@@ -253,19 +317,27 @@ export class TradeValidationService {
     return labels[decision];
   }
 
-  private async findSolanaExplorerUrl(
+  private async findTradeTokenInfo(
     coin: CmcCryptoCurrency,
-  ): Promise<string | null> {
+    settings: TradeSettings,
+  ): Promise<TradeTokenInfo | null> {
+    const enabledChains = new Set(
+      settings.enabledChains.map((chain) => chain.toLowerCase()),
+    );
+
     if (coin.source === "CoinGecko") {
-      return this.findCoinGeckoSolanaExplorerUrl(coin);
+      const detail = await this.fetchCoinGeckoDetail(coin);
+
+      return this.findCoinGeckoTokenInfo(detail, settings, enabledChains);
     }
 
-    return this.findCmcSolanaExplorerUrl(coin);
+    const detail = await this.fetchCmcDetail(coin);
+    return this.findCmcTokenInfo(detail, settings, enabledChains);
   }
 
-  private async findCmcSolanaExplorerUrl(
+  private async fetchCmcDetail(
     coin: CmcCryptoCurrency,
-  ): Promise<string | null> {
+  ): Promise<CmcDetailResponse> {
     const response = await firstValueFrom(
       this.httpService.get<CmcDetailResponse>(
         "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail",
@@ -285,16 +357,12 @@ export class TradeValidationService {
       ),
     );
 
-    return (
-      response.data.data?.urls?.explorer?.find((url) =>
-        this.extractSolanaTokenAddress(url),
-      ) ?? null
-    );
+    return response.data;
   }
 
-  private async findCoinGeckoSolanaExplorerUrl(
+  private async fetchCoinGeckoDetail(
     coin: CmcCryptoCurrency,
-  ): Promise<string | null> {
+  ): Promise<CoinGeckoDetailResponse> {
     const response = await firstValueFrom(
       this.httpService.get<CoinGeckoDetailResponse>(
         `https://api.coingecko.com/api/v3/coins/${coin.slug}`,
@@ -317,17 +385,140 @@ export class TradeValidationService {
       ),
     );
 
-    const solanaMint = response.data.platforms?.solana;
+    return response.data;
+  }
 
-    if (solanaMint) {
-      return `https://solscan.io/token/${solanaMint}`;
+  private findCmcTokenInfo(
+    detail: CmcDetailResponse,
+    settings: TradeSettings,
+    enabledChains: Set<string>,
+  ): TradeTokenInfo | null {
+    if (enabledChains.has("solana")) {
+      const explorerUrl =
+        detail.data?.urls?.explorer?.find((url) =>
+          this.extractSolanaTokenAddress(url),
+        ) ??
+        this.getCmcPlatformExplorer(detail, "solana");
+      const tokenAddress = explorerUrl
+        ? this.extractSolanaTokenAddress(explorerUrl)
+        : null;
+
+      if (explorerUrl && tokenAddress) {
+        return this.createTokenInfo("solana", tokenAddress, explorerUrl, settings);
+      }
     }
 
-    return (
-      response.data.links?.blockchain_site?.find((url) =>
+    if (enabledChains.has("ethereum")) {
+      const platform = detail.data?.platforms?.find(
+        (item) =>
+          item.contractChainId === 1 ||
+          item.contractPlatform?.toLowerCase() === "ethereum",
+      );
+      const explorerUrl =
+        platform?.contractExplorerUrl ??
+        detail.data?.urls?.explorer?.find((url) =>
+          this.extractEthereumTokenAddress(url),
+        );
+      const tokenAddress =
+        platform?.contractAddress ??
+        (explorerUrl ? this.extractEthereumTokenAddress(explorerUrl) : null);
+
+      if (tokenAddress) {
+        return this.createTokenInfo(
+          "ethereum",
+          tokenAddress,
+          explorerUrl ?? `https://etherscan.io/token/${tokenAddress}`,
+          settings,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  private findCoinGeckoTokenInfo(
+    detail: CoinGeckoDetailResponse,
+    settings: TradeSettings,
+    enabledChains: Set<string>,
+  ): TradeTokenInfo | null {
+    if (enabledChains.has("solana")) {
+      const solanaMint = detail.platforms?.solana;
+
+      if (solanaMint) {
+        return this.createTokenInfo(
+          "solana",
+          solanaMint,
+          `https://solscan.io/token/${solanaMint}`,
+          settings,
+        );
+      }
+
+      const explorerUrl = detail.links?.blockchain_site?.find((url) =>
         this.extractSolanaTokenAddress(url),
-      ) ?? null
+      );
+      const tokenAddress = explorerUrl
+        ? this.extractSolanaTokenAddress(explorerUrl)
+        : null;
+
+      if (explorerUrl && tokenAddress) {
+        return this.createTokenInfo("solana", tokenAddress, explorerUrl, settings);
+      }
+    }
+
+    if (enabledChains.has("ethereum")) {
+      const ethereumAddress = detail.platforms?.ethereum;
+
+      if (ethereumAddress) {
+        return this.createTokenInfo(
+          "ethereum",
+          ethereumAddress,
+          `https://etherscan.io/token/${ethereumAddress}`,
+          settings,
+        );
+      }
+    }
+
+    return null;
+  }
+
+  private getCmcPlatformExplorer(
+    detail: CmcDetailResponse,
+    platformName: string,
+  ): string | null {
+    const platform = detail.data?.platforms?.find(
+      (item) => item.contractPlatform?.toLowerCase() === platformName,
     );
+
+    return platform?.contractExplorerUrl ?? null;
+  }
+
+  private createTokenInfo(
+    chain: SupportedChain,
+    tokenAddress: string,
+    explorerUrl: string,
+    settings: TradeSettings,
+  ): TradeTokenInfo {
+    if (chain === "ethereum") {
+      return {
+        chain,
+        tokenAddress,
+        explorerUrl,
+        nativeSymbol: "ETH",
+        requestedAmount: settings.ethAmount,
+        walletAddress: settings.ethWalletAddress,
+        allowedDexIds: settings.allowedEthereumDexIds,
+      };
+    }
+
+    return {
+      chain,
+      tokenAddress,
+      explorerUrl,
+      nativeSymbol: "SOL",
+      requestedAmount: settings.solAmount,
+      walletAddress: settings.walletAddress,
+      allowedDexIds: settings.allowedSolanaDexIds,
+    };
   }
 
   private extractSolanaTokenAddress(url: string): string | null {
@@ -338,13 +529,18 @@ export class TradeValidationService {
     return match?.[1] ?? null;
   }
 
-  private async findTrustedSolanaDex(
-    tokenAddress: string,
+  private extractEthereumTokenAddress(url: string): string | null {
+    const match = url.match(/0x[a-fA-F0-9]{40}/);
+    return match?.[0] ?? null;
+  }
+
+  private async findTrustedDex(
+    tokenInfo: TradeTokenInfo,
     settings: TradeSettings,
   ): Promise<DexScreenerPair | null> {
     const response = await firstValueFrom(
       this.httpService.get<DexScreenerResponse>(
-        `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`,
+        `https://api.dexscreener.com/latest/dex/tokens/${tokenInfo.tokenAddress}`,
         {
           timeout: 20000,
         },
@@ -352,12 +548,12 @@ export class TradeValidationService {
     );
 
     const allowedDexIds = new Set(
-      settings.allowedSolanaDexIds.map((dexId) => dexId.toLowerCase()),
+      tokenInfo.allowedDexIds.map((dexId) => dexId.toLowerCase()),
     );
 
     return (
       (response.data.pairs ?? [])
-        .filter((pair) => pair.chainId === "solana")
+        .filter((pair) => pair.chainId === tokenInfo.chain)
         .filter((pair) => allowedDexIds.has((pair.dexId ?? "").toLowerCase()))
         .filter((pair) => (pair.liquidity?.usd ?? 0) >= settings.minLiquidityUsd)
         .sort((first, second) => (second.liquidity?.usd ?? 0) - (first.liquidity?.usd ?? 0))[0] ??
@@ -365,13 +561,21 @@ export class TradeValidationService {
     );
   }
 
-  private async fetchWalletBalance(walletAddress: string): Promise<number> {
-    if (!walletAddress) {
+  private async fetchWalletBalance(tokenInfo: TradeTokenInfo): Promise<number> {
+    if (!tokenInfo.walletAddress) {
       return 0;
     }
 
+    if (tokenInfo.chain === "ethereum") {
+      return this.fetchEthereumBalance(tokenInfo.walletAddress);
+    }
+
+    return this.fetchSolanaBalance(tokenInfo.walletAddress);
+  }
+
+  private async fetchSolanaBalance(walletAddress: string): Promise<number> {
     const response = await firstValueFrom(
-      this.httpService.post<SolanaBalanceResponse>(
+      this.httpService.post<JsonRpcBalanceResponse>(
         this.configService.get<string>("SOLANA_RPC_URL") ??
           "https://api.mainnet-beta.solana.com",
         {
@@ -390,14 +594,48 @@ export class TradeValidationService {
       throw new Error(response.data.error.message);
     }
 
-    return (response.data.result?.value ?? 0) / 1_000_000_000;
+    const result = response.data.result;
+    return typeof result === "object" ? (result.value ?? 0) / 1_000_000_000 : 0;
+  }
+
+  private async fetchEthereumBalance(walletAddress: string): Promise<number> {
+    const response = await firstValueFrom(
+      this.httpService.post<JsonRpcBalanceResponse>(
+        this.configService.get<string>("ETH_RPC_URL") ??
+          "https://cloudflare-eth.com",
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_getBalance",
+          params: [walletAddress, "latest"],
+        },
+        {
+          timeout: 20000,
+        },
+      ),
+    );
+
+    if (response.data.error?.message) {
+      throw new Error(response.data.error.message);
+    }
+
+    const result = response.data.result;
+    return typeof result === "string" ? Number(BigInt(result)) / 1e18 : 0;
   }
 
   private getOneHourPriceChange(coin: CmcCryptoCurrency): number | undefined {
     return coin.quotes?.find((quote) => quote.name === "USD")?.percentChange1h;
   }
 
-  private async checkSolanaRisk(tokenAddress: string): Promise<SolanaRiskResult> {
+  private async checkRisk(tokenInfo: TradeTokenInfo): Promise<RiskResult> {
+    if (tokenInfo.chain === "ethereum") {
+      return this.checkEthereumRisk(tokenInfo.tokenAddress);
+    }
+
+    return this.checkSolanaRisk(tokenInfo.tokenAddress);
+  }
+
+  private async checkSolanaRisk(tokenAddress: string): Promise<RiskResult> {
     try {
       const response = await firstValueFrom(
         this.httpService.get<RugCheckSummaryResponse>(
@@ -436,6 +674,95 @@ export class TradeValidationService {
     }
   }
 
+  private async checkEthereumRisk(tokenAddress: string): Promise<RiskResult> {
+    const parts: string[] = [];
+    let highRisk = false;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<HoneypotResponse>(
+          "https://api.honeypot.is/v2/IsHoneypot",
+          {
+            params: {
+              address: tokenAddress,
+              chainID: 1,
+            },
+            timeout: 20000,
+          },
+        ),
+      );
+      const flags = response.data.summary?.flags ?? [];
+      const failed = Number(response.data.holderAnalysis?.failed ?? 0);
+      const holders = Number(response.data.holderAnalysis?.holders ?? 0);
+      const failureRatio = holders ? failed / holders : 0;
+
+      highRisk =
+        highRisk ||
+        Boolean(response.data.honeypotResult?.isHoneypot) ||
+        failureRatio >= 0.25 ||
+        flags.some((flag) =>
+          ["critical", "high"].includes((flag.severity ?? "").toLowerCase()),
+        ) ||
+        response.data.contractCode?.openSource === false;
+      parts.push(
+        [
+          `Honeypot risk=${response.data.summary?.risk ?? "n/a"}`,
+          `isHoneypot=${response.data.honeypotResult?.isHoneypot ?? "n/a"}`,
+          `failedSells=${failed}/${holders || "n/a"}`,
+          `openSource=${response.data.contractCode?.openSource ?? "n/a"}`,
+        ].join(", "),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      highRisk = true;
+      parts.push(`Honeypot check failed: ${message}`);
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<GoPlusResponse>(
+          "https://api.gopluslabs.io/api/v1/token_security/1",
+          {
+            params: {
+              contract_addresses: tokenAddress,
+            },
+            timeout: 20000,
+          },
+        ),
+      );
+      const security =
+        response.data.result?.[tokenAddress.toLowerCase()] ??
+        response.data.result?.[tokenAddress];
+      const unlockedLp =
+        security?.lp_holders?.some((holder) => String(holder.is_locked) !== "1") ??
+        false;
+
+      highRisk =
+        highRisk ||
+        security?.cannot_sell_all === "1" ||
+        security?.is_honeypot === "1" ||
+        security?.is_open_source === "0" ||
+        unlockedLp;
+      parts.push(
+        [
+          `GoPlus cannotSellAll=${security?.cannot_sell_all ?? "n/a"}`,
+          `honeypot=${security?.is_honeypot ?? "n/a"}`,
+          `openSource=${security?.is_open_source ?? "n/a"}`,
+          `unlockedLp=${unlockedLp}`,
+        ].join(", "),
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      highRisk = true;
+      parts.push(`GoPlus check failed: ${message}`);
+    }
+
+    return {
+      highRisk,
+      summary: parts.join(" | "),
+    };
+  }
+
   private isHighRiskItem(risk: RugCheckRisk): boolean {
     const name = (risk.name ?? "").toLowerCase();
     const description = (risk.description ?? "").toLowerCase();
@@ -454,21 +781,27 @@ export class TradeValidationService {
     );
   }
 
+  private formatChain(chain: SupportedChain): string {
+    return chain === "ethereum" ? "اتریوم" : "سولانا";
+  }
+
   private reject(
     settings: TradeSettings,
     reason: string,
     tokenAddress?: string,
     explorerUrl?: string,
+    chain?: SupportedChain,
   ): TradeValidationResult {
     return {
       enabled: true,
       accepted: false,
       decision: "rejected",
       reason,
-      chain: settings.solanaOnly ? "solana" : undefined,
+      chain,
       tokenAddress,
       explorerUrl,
-      requestedSolAmount: settings.solAmount,
+      requestedNativeAmount: chain === "ethereum" ? settings.ethAmount : settings.solAmount,
+      nativeSymbol: chain === "ethereum" ? "ETH" : chain === "solana" ? "SOL" : undefined,
       dryRun: true,
     };
   }

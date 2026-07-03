@@ -2,12 +2,16 @@ export interface TradeSettings {
   enabled: boolean;
   mode: "dry-run";
   solAmount: number;
+  ethAmount: number;
   walletAddress: string;
+  ethWalletAddress: string;
   solanaOnly: boolean;
+  enabledChains: string[];
   minLiquidityUsd: number;
   showHighRiskAlerts: boolean;
   autoBuyDropThresholdPercent: number;
   allowedSolanaDexIds: string[];
+  allowedEthereumDexIds: string[];
 }
 
 export type TradeDecision =
@@ -31,6 +35,9 @@ export interface TradeValidationResult {
   riskSummary?: string;
   priceChange1hPercent?: number;
   autoBuyDropThresholdPercent?: number;
+  nativeSymbol?: string;
+  walletNativeBalance?: number;
+  requestedNativeAmount?: number;
   walletSolBalance?: number;
   requestedSolAmount?: number;
   dryRun: boolean;

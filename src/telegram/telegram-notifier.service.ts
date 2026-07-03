@@ -15,7 +15,10 @@ export class TelegramNotifierService {
     private readonly subscriberRepository: SubscriberRepositoryService,
   ) {}
 
-  async sendPriceDropAlert(alert: PriceDropAlert): Promise<boolean> {
+  async sendPriceDropAlert(
+    alert: PriceDropAlert,
+    extraText?: string,
+  ): Promise<boolean> {
     const botToken = this.configService.get<string>("TELEGRAM_BOT_TOKEN");
     const subscribers = this.subscriberRepository.all();
 
@@ -30,7 +33,7 @@ export class TelegramNotifierService {
     }
 
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-    const text = this.formatPriceDropAlert(alert);
+    const text = this.formatPriceDropAlert(alert, extraText);
     let sentCount = 0;
 
     for (const subscriber of subscribers) {
@@ -60,7 +63,7 @@ export class TelegramNotifierService {
     return sentCount > 0;
   }
 
-  private formatPriceDropAlert(alert: PriceDropAlert): string {
+  private formatPriceDropAlert(alert: PriceDropAlert, extraText?: string): string {
     const { coin, quote, thresholdPercent } = alert;
     const change = this.formatPercent(quote.percentChange1h);
     const price = this.formatUsd(quote.price);
@@ -71,7 +74,7 @@ export class TelegramNotifierService {
       coin.sourceUrl ?? `https://coinmarketcap.com/currencies/${coin.slug}/`;
     const updatedAt = quote.lastUpdated ?? coin.lastUpdated ?? "n/a";
 
-    return [
+    const lines = [
       "هشدار ریزش یک‌ساعته",
       "",
       `نام: ${coin.name} (${coin.symbol})`,
@@ -82,7 +85,23 @@ export class TelegramNotifierService {
       `قیمت USD: ${price}`,
       `آخرین بروزرسانی: ${updatedAt}`,
       `لینک: ${sourceUrl}`,
-    ].join("\n");
+    ];
+    const botPrefix = this.getBotPrefix();
+
+    if (botPrefix) {
+      lines.unshift(botPrefix, "");
+    }
+
+    if (extraText) {
+      lines.push("", extraText);
+    }
+
+    return lines.join("\n");
+  }
+
+  private getBotPrefix(): string {
+    const label = this.configService.get<string>("BOT_ENV_LABEL");
+    return label ? `محیط: ${label}` : "";
   }
 
   private formatPercent(value: number | undefined): string {

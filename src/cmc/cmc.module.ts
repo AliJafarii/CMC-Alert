@@ -7,6 +7,8 @@ import { CmcService } from "./cmc.service";
 import { CoinGeckoService } from "./coingecko.service";
 import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
+import { TradeSettingsService } from "./trade-settings.service";
+import { TradeValidationService } from "./trade-validation.service";
 
 @Module({
   imports: [HttpModule, TelegramModule],
@@ -17,6 +19,8 @@ import { PriceAlertService } from "./price-alert.service";
     CmcPollerService,
     PriceAnomalyService,
     PriceAlertService,
+    TradeSettingsService,
+    TradeValidationService,
   ],
 })
 export class CmcModule {}

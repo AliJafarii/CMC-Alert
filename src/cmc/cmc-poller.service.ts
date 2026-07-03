@@ -7,6 +7,7 @@ import { CmcCryptoCurrency } from "./cmc.types";
 import { CoinGeckoService } from "./coingecko.service";
 import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
+import { TradeValidationService } from "./trade-validation.service";
 
 interface ProcessCoinsResult {
   alertCount: number;
@@ -26,6 +27,7 @@ export class CmcPollerService implements OnModuleInit {
     private readonly coinGeckoService: CoinGeckoService,
     private readonly priceAnomalyService: PriceAnomalyService,
     private readonly priceAlertService: PriceAlertService,
+    private readonly tradeValidationService: TradeValidationService,
     private readonly telegramNotifierService: TelegramNotifierService,
   ) {}
 
@@ -122,8 +124,23 @@ export class CmcPollerService implements OnModuleInit {
       }
 
       try {
+        const tradeResult = await this.tradeValidationService.validate(coin);
+
+        if (tradeResult.enabled && !tradeResult.accepted) {
+          this.logger.warn(
+            `Trade validation rejected ${this.describeCoin(coin)}: ${tradeResult.reason}`,
+          );
+          continue;
+        }
+
+        const validationText = tradeResult.enabled
+          ? this.tradeValidationService.formatResult(tradeResult)
+          : undefined;
         const isSent =
-          await this.telegramNotifierService.sendPriceDropAlert(alert);
+          await this.telegramNotifierService.sendPriceDropAlert(
+            alert,
+            validationText,
+          );
 
         if (isSent) {
           this.alertStateService.markTriggered(coin);

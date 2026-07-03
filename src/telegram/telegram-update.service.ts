@@ -45,6 +45,16 @@ interface AnomalyStateEntry {
   reason?: string;
 }
 
+interface TradeSettingsState {
+  enabled?: boolean;
+  mode?: "dry-run";
+  solAmount?: number;
+  walletAddress?: string;
+  solanaOnly?: boolean;
+  minLiquidityUsd?: number;
+  allowedSolanaDexIds?: string[];
+}
+
 @Injectable()
 export class TelegramUpdateService implements OnModuleInit {
   private readonly logger = new Logger(TelegramUpdateService.name);
@@ -57,6 +67,11 @@ export class TelegramUpdateService implements OnModuleInit {
     process.cwd(),
     "data",
     "price-anomaly-state.json",
+  );
+  private readonly tradeSettingsPath = join(
+    process.cwd(),
+    "data",
+    "trade-settings.json",
   );
   private isRunning = false;
   private offset = 0;
@@ -167,6 +182,11 @@ export class TelegramUpdateService implements OnModuleInit {
       text === "گزارش کوین‌های آنرمال"
     ) {
       await this.handleAnomaliesCommand(chatId, text);
+      return;
+    }
+
+    if (this.isTradeSettingsCommand(text)) {
+      await this.handleTradeSettingsCommand(chatId, text);
     }
   }
 
@@ -281,7 +301,16 @@ export class TelegramUpdateService implements OnModuleInit {
     }
 
     return {
-      keyboard: [["گزارش کوین‌های آنرمال"]],
+      keyboard: [
+        ["گزارش کوین‌های آنرمال"],
+        ["وضعیت خرید تست"],
+        ["فعال‌سازی خرید تست", "توقف خرید تست"],
+        [
+          "مبلغ خرید 0.01 سولانا",
+          "مبلغ خرید 0.05 سولانا",
+          "مبلغ خرید 0.1 سولانا",
+        ],
+      ],
       resize_keyboard: true,
       one_time_keyboard: false,
     };
@@ -337,6 +366,111 @@ export class TelegramUpdateService implements OnModuleInit {
     }
 
     return `https://coinmarketcap.com/currencies/${entry.slug}/`;
+  }
+
+  private isTradeSettingsCommand(text: string): boolean {
+    return [
+      "وضعیت خرید تست",
+      "فعال‌سازی خرید تست",
+      "توقف خرید تست",
+      "مبلغ خرید 0.01 سولانا",
+      "مبلغ خرید 0.05 سولانا",
+      "مبلغ خرید 0.1 سولانا",
+    ].includes(text);
+  }
+
+  private async handleTradeSettingsCommand(
+    chatId: string,
+    text: string,
+  ): Promise<void> {
+    if (!this.isAdmin(chatId)) {
+      await this.sendText(chatId, "این دستور فقط برای ادمین فعال است.");
+      return;
+    }
+
+    const settings = this.loadTradeSettings();
+
+    if (text === "فعال‌سازی خرید تست") {
+      settings.enabled = true;
+    }
+
+    if (text === "توقف خرید تست") {
+      settings.enabled = false;
+    }
+
+    const amountMatch = text.match(/مبلغ خرید ([0-9.]+) سولانا/);
+
+    if (amountMatch) {
+      settings.solAmount = Number(amountMatch[1]);
+    }
+
+    settings.mode = "dry-run";
+    this.saveTradeSettings(settings);
+
+    await this.sendText(
+      chatId,
+      this.formatTradeSettings(settings),
+      this.getAdminReplyMarkup(chatId),
+    );
+  }
+
+  private loadTradeSettings(): TradeSettingsState {
+    const defaults: TradeSettingsState = {
+      enabled: false,
+      mode: "dry-run",
+      solAmount: 0.01,
+      walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
+      solanaOnly: true,
+      minLiquidityUsd: 1000,
+      allowedSolanaDexIds: [
+        "raydium",
+        "orca",
+        "meteora",
+        "pumpswap",
+        "pancakeswap",
+        "lifinity",
+        "jupiter-studio",
+      ],
+    };
+
+    if (!existsSync(this.tradeSettingsPath)) {
+      return defaults;
+    }
+
+    try {
+      return {
+        ...defaults,
+        ...(JSON.parse(
+          readFileSync(this.tradeSettingsPath, "utf8"),
+        ) as TradeSettingsState),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to read trade settings: ${message}`);
+      return defaults;
+    }
+  }
+
+  private saveTradeSettings(settings: TradeSettingsState): void {
+    mkdirSync(dirname(this.tradeSettingsPath), { recursive: true });
+    writeFileSync(
+      this.tradeSettingsPath,
+      `${JSON.stringify(settings, null, 2)}\n`,
+      "utf8",
+    );
+  }
+
+  private formatTradeSettings(settings: TradeSettingsState): string {
+    return [
+      "وضعیت تنظیمات خرید تست",
+      `فعال بودن: ${settings.enabled ? "بله" : "نه"}`,
+      `حالت اجرا: ${settings.mode ?? "dry-run"}`,
+      `مبلغ هر خرید: ${settings.solAmount ?? 0.01} SOL`,
+      `ولیت: ${settings.walletAddress ?? "تنظیم نشده"}`,
+      `شبکه: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
+      `حداقل نقدینگی: ${settings.minLiquidityUsd ?? 1000} دلار`,
+      `DEXهای مجاز: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,
+    ].join("\n");
   }
 
   private loadOffset(): number {

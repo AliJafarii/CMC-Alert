@@ -1,0 +1,15 @@
+[Unit]
+Description=cmc-alert Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/cmc-alert
+EnvironmentFile=/root/cmc-alert/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

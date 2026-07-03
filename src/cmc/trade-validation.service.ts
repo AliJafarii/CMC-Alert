@@ -14,6 +14,14 @@ interface CmcDetailResponse {
   };
 }
 
+interface CoinGeckoDetailResponse {
+  asset_platform_id?: string;
+  platforms?: Record<string, string | null | undefined>;
+  links?: {
+    blockchain_site?: string[];
+  };
+}
+
 interface DexScreenerResponse {
   pairs?: DexScreenerPair[];
 }
@@ -63,7 +71,10 @@ export class TradeValidationService {
       const explorerUrl = await this.findSolanaExplorerUrl(coin);
 
       if (!explorerUrl) {
-        return this.reject(settings, "لینک explorer سولانا در CMC پیدا نشد.");
+        return this.reject(
+          settings,
+          "لینک یا platform سولانا در منبع کوین پیدا نشد.",
+        );
       }
 
       const tokenAddress = this.extractSolanaTokenAddress(explorerUrl);
@@ -130,6 +141,16 @@ export class TradeValidationService {
   private async findSolanaExplorerUrl(
     coin: CmcCryptoCurrency,
   ): Promise<string | null> {
+    if (coin.source === "CoinGecko") {
+      return this.findCoinGeckoSolanaExplorerUrl(coin);
+    }
+
+    return this.findCmcSolanaExplorerUrl(coin);
+  }
+
+  private async findCmcSolanaExplorerUrl(
+    coin: CmcCryptoCurrency,
+  ): Promise<string | null> {
     const response = await firstValueFrom(
       this.httpService.get<CmcDetailResponse>(
         "https://api.coinmarketcap.com/data-api/v3/cryptocurrency/detail",
@@ -151,6 +172,44 @@ export class TradeValidationService {
 
     return (
       response.data.data?.urls?.explorer?.find((url) =>
+        this.extractSolanaTokenAddress(url),
+      ) ?? null
+    );
+  }
+
+  private async findCoinGeckoSolanaExplorerUrl(
+    coin: CmcCryptoCurrency,
+  ): Promise<string | null> {
+    const response = await firstValueFrom(
+      this.httpService.get<CoinGeckoDetailResponse>(
+        `https://api.coingecko.com/api/v3/coins/${coin.slug}`,
+        {
+          params: {
+            localization: "false",
+            tickers: "false",
+            market_data: "false",
+            community_data: "false",
+            developer_data: "false",
+            sparkline: "false",
+          },
+          headers: {
+            accept: "application/json",
+            "user-agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+          },
+          timeout: 20000,
+        },
+      ),
+    );
+
+    const solanaMint = response.data.platforms?.solana;
+
+    if (solanaMint) {
+      return `https://solscan.io/token/${solanaMint}`;
+    }
+
+    return (
+      response.data.links?.blockchain_site?.find((url) =>
         this.extractSolanaTokenAddress(url),
       ) ?? null
     );

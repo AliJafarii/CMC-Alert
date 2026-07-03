@@ -27,6 +27,7 @@ export interface TradeValidationResult {
   dexId?: string;
   pairUrl?: string;
   liquidityUsd?: number;
+  riskSummary?: string;
   walletSolBalance?: number;
   requestedSolAmount?: number;
   dryRun: boolean;

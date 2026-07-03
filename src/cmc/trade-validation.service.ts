@@ -45,6 +45,24 @@ interface SolanaBalanceResponse {
   };
 }
 
+interface RugCheckSummaryResponse {
+  risks?: RugCheckRisk[];
+  score_normalised?: number;
+  lpLockedPct?: number;
+}
+
+interface RugCheckRisk {
+  name?: string;
+  value?: string;
+  description?: string;
+  level?: string;
+}
+
+interface SolanaRiskResult {
+  highRisk: boolean;
+  summary: string;
+}
+
 @Injectable()
 export class TradeValidationService {
   private readonly logger = new Logger(TradeValidationService.name);
@@ -95,6 +113,35 @@ export class TradeValidationService {
         );
       }
 
+      const riskResult = await this.checkSolanaRisk(tokenAddress);
+
+      if (riskResult.highRisk) {
+        if (!settings.showHighRiskAlerts) {
+          return this.reject(
+            settings,
+            `ریسک سولانا قابل قبول نبود: ${riskResult.summary}`,
+            tokenAddress,
+            explorerUrl,
+          );
+        }
+
+        return {
+          enabled: true,
+          accepted: true,
+          decision: "high_risk",
+          reason: "کوین سولانایی است، اما ریسک قفل یا ریسک امنیتی دارد؛ فقط نمایش داده می‌شود.",
+          chain: "solana",
+          tokenAddress,
+          explorerUrl,
+          dexId: dexResult.dexId,
+          pairUrl: dexResult.url,
+          liquidityUsd: dexResult.liquidity?.usd,
+          riskSummary: riskResult.summary,
+          requestedSolAmount: settings.solAmount,
+          dryRun: true,
+        };
+      }
+
       const walletSolBalance = await this.fetchWalletBalance(settings.walletAddress);
       const hasBalance = walletSolBalance >= settings.solAmount;
       const decision = hasBalance ? "auto_buy" : "review";
@@ -113,6 +160,7 @@ export class TradeValidationService {
         dexId: dexResult.dexId,
         pairUrl: dexResult.url,
         liquidityUsd: dexResult.liquidity?.usd,
+        riskSummary: riskResult.summary,
         walletSolBalance,
         requestedSolAmount: settings.solAmount,
         dryRun: true,
@@ -136,6 +184,7 @@ export class TradeValidationService {
       `صرافی معتبر: ${result.dexId ?? "n/a"}`,
       `لینک pair: ${result.pairUrl ?? "n/a"}`,
       `نقدینگی دلاری: ${result.liquidityUsd ?? "n/a"}`,
+      `ریسک سولانا: ${result.riskSummary ?? "n/a"}`,
       `موجودی ولت: ${result.walletSolBalance ?? "n/a"} SOL`,
       `مبلغ خرید تست: ${result.requestedSolAmount ?? "n/a"} SOL`,
       `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
@@ -302,21 +351,74 @@ export class TradeValidationService {
     return (response.data.result?.value ?? 0) / 1_000_000_000;
   }
 
+  private async checkSolanaRisk(tokenAddress: string): Promise<SolanaRiskResult> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<RugCheckSummaryResponse>(
+          `https://api.rugcheck.xyz/v1/tokens/${tokenAddress}/report/summary`,
+          {
+            timeout: 20000,
+          },
+        ),
+      );
+      const risks = response.data.risks ?? [];
+      const riskyItems = risks.filter((risk) => this.isHighRiskItem(risk));
+      const riskText = risks.length
+        ? risks
+            .map((risk) =>
+              [risk.name, risk.value, risk.level].filter(Boolean).join(" / "),
+            )
+            .join(" | ")
+        : "ریسک جدی از RugCheck گزارش نشد.";
+      const lowLpLock =
+        response.data.lpLockedPct !== undefined && response.data.lpLockedPct < 50;
+      const highScore =
+        response.data.score_normalised !== undefined &&
+        response.data.score_normalised >= 60;
+
+      return {
+        highRisk: Boolean(riskyItems.length || lowLpLock || highScore),
+        summary: riskText,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return {
+        highRisk: true,
+        summary: `بررسی ریسک سولانا ناموفق بود: ${message}`,
+      };
+    }
+  }
+
+  private isHighRiskItem(risk: RugCheckRisk): boolean {
+    const name = (risk.name ?? "").toLowerCase();
+    const description = (risk.description ?? "").toLowerCase();
+    const level = (risk.level ?? "").toLowerCase();
+    const text = `${name} ${description}`;
+
+    return (
+      ["danger", "critical", "high"].includes(level) ||
+      text.includes("freeze") ||
+      text.includes("mint authority") ||
+      text.includes("non-transferable") ||
+      text.includes("permanent delegate") ||
+      text.includes("transfer fee") ||
+      text.includes("single holder") ||
+      text.includes("high holder concentration")
+    );
+  }
+
   private reject(
     settings: TradeSettings,
     reason: string,
     tokenAddress?: string,
     explorerUrl?: string,
   ): TradeValidationResult {
-    const shouldShowHighRisk = settings.showHighRiskAlerts;
-
     return {
       enabled: true,
-      accepted: shouldShowHighRisk,
-      decision: shouldShowHighRisk ? "high_risk" : "rejected",
-      reason: shouldShowHighRisk
-        ? `پرریسک و فقط برای نمایش: ${reason}`
-        : reason,
+      accepted: false,
+      decision: "rejected",
+      reason,
       chain: settings.solanaOnly ? "solana" : undefined,
       tokenAddress,
       explorerUrl,

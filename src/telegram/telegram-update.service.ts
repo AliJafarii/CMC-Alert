@@ -52,6 +52,7 @@ interface TradeSettingsState {
   walletAddress?: string;
   solanaOnly?: boolean;
   minLiquidityUsd?: number;
+  showHighRiskAlerts?: boolean;
   allowedSolanaDexIds?: string[];
 }
 
@@ -438,6 +439,7 @@ export class TelegramUpdateService implements OnModuleInit {
       walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
       solanaOnly: true,
       minLiquidityUsd: 1000,
+      showHighRiskAlerts: true,
       allowedSolanaDexIds: [
         "raydium",
         "orca",
@@ -485,6 +487,7 @@ export class TelegramUpdateService implements OnModuleInit {
       `ولیت: ${settings.walletAddress ?? "تنظیم نشده"}`,
       `شبکه: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd ?? 1000} دلار`,
+      `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
       `DEXهای مجاز: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,
     ].join("\n");
   }

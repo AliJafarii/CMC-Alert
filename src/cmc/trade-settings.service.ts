@@ -39,6 +39,7 @@ export class TradeSettingsService {
       `ولیت: ${settings.walletAddress || "تنظیم نشده"}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd} دلار`,
       `شبکه فعال: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
+      `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
       `DEXهای مجاز سولانا: ${settings.allowedSolanaDexIds.join(", ")}`,
     ].join("\n");
   }
@@ -51,6 +52,7 @@ export class TradeSettingsService {
       walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
       solanaOnly: this.getBoolean("TRADE_SOLANA_ONLY", true),
       minLiquidityUsd: this.getNumber("TRADE_MIN_LIQUIDITY_USD", 1000, 0, 1_000_000),
+      showHighRiskAlerts: this.getBoolean("TRADE_SHOW_HIGH_RISK_ALERTS", true),
       allowedSolanaDexIds: this.getList("TRADE_ALLOWED_SOLANA_DEX_IDS", [
         "raydium",
         "orca",

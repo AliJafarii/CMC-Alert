@@ -5,10 +5,16 @@ export interface TradeSettings {
   walletAddress: string;
   solanaOnly: boolean;
   minLiquidityUsd: number;
+  showHighRiskAlerts: boolean;
   allowedSolanaDexIds: string[];
 }
 
-export type TradeDecision = "disabled" | "rejected" | "review" | "auto_buy";
+export type TradeDecision =
+  | "disabled"
+  | "rejected"
+  | "high_risk"
+  | "review"
+  | "auto_buy";
 
 export interface TradeValidationResult {
   enabled: boolean;

@@ -127,7 +127,7 @@ export class TradeValidationService {
   formatResult(result: TradeValidationResult): string {
     return [
       "نتیجه مرحله دوم خرید تست",
-      `وضعیت: ${result.accepted ? "قبول" : "رد"}`,
+      `وضعیت: ${this.formatStatus(result)}`,
       `دسته: ${this.formatDecision(result.decision)}`,
       `دلیل: ${result.reason}`,
       `شبکه: ${result.chain ?? "n/a"}`,
@@ -142,10 +142,19 @@ export class TradeValidationService {
     ].join("\n");
   }
 
+  private formatStatus(result: TradeValidationResult): string {
+    if (result.decision === "high_risk") {
+      return "فقط نمایش";
+    }
+
+    return result.accepted ? "قبول" : "رد";
+  }
+
   private formatDecision(decision: TradeValidationResult["decision"]): string {
     const labels: Record<TradeValidationResult["decision"], string> = {
       disabled: "غیرفعال",
       rejected: "رد شده",
+      high_risk: "پرریسک، فقط نمایش",
       review: "قابل بررسی برای خرید",
       auto_buy: "مجاز برای خرید خودکار",
     };
@@ -299,11 +308,15 @@ export class TradeValidationService {
     tokenAddress?: string,
     explorerUrl?: string,
   ): TradeValidationResult {
+    const shouldShowHighRisk = settings.showHighRiskAlerts;
+
     return {
       enabled: true,
-      accepted: false,
-      decision: "rejected",
-      reason,
+      accepted: shouldShowHighRisk,
+      decision: shouldShowHighRisk ? "high_risk" : "rejected",
+      reason: shouldShowHighRisk
+        ? `پرریسک و فقط برای نمایش: ${reason}`
+        : reason,
       chain: settings.solanaOnly ? "solana" : undefined,
       tokenAddress,
       explorerUrl,

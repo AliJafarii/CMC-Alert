@@ -1,0 +1,11 @@
+[Unit]
+Description=Run cmc-alert bot healthcheck every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=cmc-alert-health.service
+
+[Install]
+WantedBy=timers.target

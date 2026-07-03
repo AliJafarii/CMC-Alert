@@ -53,11 +53,17 @@ drop without repeated explosive rebounds. Results are cached in
 ## systemd
 
 Copy `cmc-alert.service.example` to `/etc/systemd/system/cmc-alert.service`
-after creating `/root/cmc-alert/.env`, then enable it:
+after creating `/root/cmc-alert/.env`, then install the healthcheck and enable
+both units:
 
 ```bash
+sudo install -m 755 scripts/healthcheck.sh /usr/local/sbin/cmc-alert-healthcheck
+sudo cp cmc-alert-health.service.example /etc/systemd/system/cmc-alert-health.service
+sudo cp cmc-alert-health.timer.example /etc/systemd/system/cmc-alert-health.timer
+sudo cp cmc-alert.service.example /etc/systemd/system/cmc-alert.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now cmc-alert
+sudo systemctl enable --now cmc-alert-health.timer
 sudo systemctl status cmc-alert
 ```
 

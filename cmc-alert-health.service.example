@@ -1,0 +1,6 @@
+[Unit]
+Description=Healthcheck cmc-alert bot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cmc-alert-healthcheck

@@ -24,6 +24,11 @@ interface PricePoint {
 interface AnomalyCacheEntry {
   checkedAt: string;
   isAnomalous: boolean;
+  source: string;
+  coinId: string | number;
+  name: string;
+  symbol: string;
+  slug: string;
   reason: string;
 }
 
@@ -68,6 +73,11 @@ export class PriceAnomalyService {
       this.cache.set(cacheKey, {
         checkedAt: new Date().toISOString(),
         isAnomalous: result.isAnomalous,
+        source: coin.source ?? "CoinMarketCap",
+        coinId: coin.id,
+        name: coin.name,
+        symbol: coin.symbol,
+        slug: coin.slug,
         reason,
       });
       this.save();

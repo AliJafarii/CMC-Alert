@@ -2,7 +2,7 @@ import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { firstValueFrom } from "rxjs";
 import { SubscriberRepositoryService } from "./subscriber-repository.service";
@@ -27,6 +27,17 @@ interface TelegramMessage {
   };
 }
 
+interface AnomalyStateEntry {
+  checkedAt?: string;
+  isAnomalous?: boolean;
+  source?: string;
+  coinId?: string | number;
+  name?: string;
+  symbol?: string;
+  slug?: string;
+  reason?: string;
+}
+
 @Injectable()
 export class TelegramUpdateService implements OnModuleInit {
   private readonly logger = new Logger(TelegramUpdateService.name);
@@ -34,6 +45,11 @@ export class TelegramUpdateService implements OnModuleInit {
     process.cwd(),
     "data",
     "telegram-state.json",
+  );
+  private readonly anomalyStatePath = join(
+    process.cwd(),
+    "data",
+    "price-anomaly-state.json",
   );
   private isRunning = false;
   private offset = 0;
@@ -134,7 +150,55 @@ export class TelegramUpdateService implements OnModuleInit {
         chatId,
         `بات روشن است. تعداد subscriberها: ${this.subscriberRepository.count()}`,
       );
+      return;
     }
+
+    if (text.startsWith("/anomalies")) {
+      await this.handleAnomaliesCommand(chatId, text);
+    }
+  }
+
+  private async handleAnomaliesCommand(
+    chatId: string,
+    text: string,
+  ): Promise<void> {
+    if (!this.isAdmin(chatId)) {
+      await this.sendText(chatId, "این دستور فقط برای ادمین فعال است.");
+      return;
+    }
+
+    const limit = this.parseLimit(text);
+    const entries = this.loadAnomalyEntries()
+      .filter((entry) => entry.isAnomalous)
+      .sort((first, second) => {
+        const firstTime = new Date(first.checkedAt ?? 0).getTime();
+        const secondTime = new Date(second.checkedAt ?? 0).getTime();
+        return secondTime - firstTime;
+      });
+
+    if (!entries.length) {
+      await this.sendText(chatId, "فعلا هیچ کوین آنرمالی در state ثبت نشده.");
+      return;
+    }
+
+    const visibleEntries = entries.slice(0, limit);
+    const lines = [
+      `گزارش کوین‌های آنرمال ثبت‌شده: ${entries.length}`,
+      `تعداد نمایش در این پیام: ${visibleEntries.length}`,
+      "",
+      ...visibleEntries.map((entry, index) =>
+        [
+          `${index + 1}. نام: ${entry.name ?? "ناشناخته"} (${entry.symbol ?? "n/a"})`,
+          `منبع: ${entry.source ?? "n/a"}`,
+          `شناسه: ${entry.coinId ?? "n/a"}`,
+          `اسلاگ: ${entry.slug ?? "n/a"}`,
+          `زمان بررسی: ${entry.checkedAt ?? "n/a"}`,
+          `دلیل: ${entry.reason ?? "n/a"}`,
+        ].join("\n"),
+      ),
+    ];
+
+    await this.sendLongText(chatId, lines.join("\n\n"));
   }
 
   private async sendText(chatId: string, text: string): Promise<void> {
@@ -156,6 +220,71 @@ export class TelegramUpdateService implements OnModuleInit {
         },
       ),
     );
+  }
+
+  private async sendLongText(chatId: string, text: string): Promise<void> {
+    const maxLength = 3900;
+    const chunks: string[] = [];
+    let remainingText = text;
+
+    while (remainingText.length > maxLength) {
+      const splitIndex = Math.max(
+        remainingText.lastIndexOf("\n\n", maxLength),
+        remainingText.lastIndexOf("\n", maxLength),
+      );
+      const index = splitIndex > 0 ? splitIndex : maxLength;
+      chunks.push(remainingText.slice(0, index));
+      remainingText = remainingText.slice(index).trimStart();
+    }
+
+    chunks.push(remainingText);
+
+    for (const chunk of chunks) {
+      await this.sendText(chatId, chunk);
+    }
+  }
+
+  private isAdmin(chatId: string): boolean {
+    const adminChatIds = (
+      this.configService.get<string>("TELEGRAM_ADMIN_CHAT_IDS") ??
+      this.configService.get<string>("TELEGRAM_ADMIN_CHAT_ID") ??
+      this.configService.get<string>("TELEGRAM_CHAT_ID") ??
+      ""
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    return adminChatIds.includes(chatId);
+  }
+
+  private parseLimit(text: string): number {
+    const [, rawLimit] = text.split(/\s+/, 2);
+    const limit = Number(rawLimit ?? 20);
+
+    if (!Number.isFinite(limit)) {
+      return 20;
+    }
+
+    return Math.min(Math.max(Math.floor(limit), 1), 50);
+  }
+
+  private loadAnomalyEntries(): AnomalyStateEntry[] {
+    if (!existsSync(this.anomalyStatePath)) {
+      return [];
+    }
+
+    try {
+      const state = JSON.parse(
+        readFileSync(this.anomalyStatePath, "utf8"),
+      ) as Record<string, AnomalyStateEntry>;
+
+      return Object.values(state);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to read anomaly state: ${message}`);
+      return [];
+    }
   }
 
   private loadOffset(): number {

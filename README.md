@@ -35,6 +35,7 @@ CMC_ANOMALY_CACHE_HOURS=24
 COINGECKO_PAGES_PER_POLL=1
 TELEGRAM_BOT_TOKEN="put-your-token-here"
 TELEGRAM_CHAT_ID="optional-default-chat-id"
+TELEGRAM_ADMIN_CHAT_IDS="optional-admin-chat-id,optional-second-admin-chat-id"
 ```
 
 `CMC_POLL_CRON="0 * * * * *"` means once per minute, at second zero.
@@ -42,6 +43,9 @@ TELEGRAM_CHAT_ID="optional-default-chat-id"
 in one hour.
 `TELEGRAM_CHAT_ID` is optional; users can subscribe with `/start`, but setting a
 default chat id seeds the first subscriber on startup.
+`TELEGRAM_ADMIN_CHAT_IDS` is optional; it controls who can inspect temporary
+admin-only anomaly reports. If omitted, the bot falls back to
+`TELEGRAM_ADMIN_CHAT_ID`, then `TELEGRAM_CHAT_ID`.
 
 The anomaly filter checks seven-day price history before sending a drop alert.
 By default it suppresses a coin only when the history has at least two drops of
@@ -88,6 +92,8 @@ same active alert.
 
 Users can subscribe by sending `/start` to the Telegram bot. They can stop
 alerts with `/stop` and check the worker with `/status`.
+Admins can send `/anomalies` to list cached anomalous coins, or
+`/anomalies 50` to raise the temporary report limit.
 
 The bot logs:
 

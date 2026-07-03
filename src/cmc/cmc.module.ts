@@ -7,6 +7,7 @@ import { CmcService } from "./cmc.service";
 import { CoinGeckoService } from "./coingecko.service";
 import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
+import { TradeExecutionService } from "./trade-execution.service";
 import { TradeSettingsService } from "./trade-settings.service";
 import { TradeValidationService } from "./trade-validation.service";
 
@@ -19,6 +20,7 @@ import { TradeValidationService } from "./trade-validation.service";
     CmcPollerService,
     PriceAnomalyService,
     PriceAlertService,
+    TradeExecutionService,
     TradeSettingsService,
     TradeValidationService,
   ],

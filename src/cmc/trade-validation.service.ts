@@ -258,6 +258,11 @@ export class TradeValidationService {
         result.nativeSymbol ?? "n/a"
       }`,
       `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
+      `وضعیت اجرای خرید: ${result.executionStatus ?? "n/a"}`,
+      `شناسه تراکنش: ${result.executionTxId ?? "n/a"}`,
+      `لینک تراکنش: ${result.executionUrl ?? "n/a"}`,
+      `خطای اجرا: ${result.executionError ?? "n/a"}`,
+      `لینک خرید دستی: ${result.manualBuyUrl ?? "n/a"}`,
     ].join("\n");
   }
 

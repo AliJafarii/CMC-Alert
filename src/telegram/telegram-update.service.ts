@@ -47,7 +47,9 @@ interface AnomalyStateEntry {
 
 interface TradeSettingsState {
   enabled?: boolean;
-  mode?: "dry-run";
+  mode?: "dry-run" | "live";
+  executionStrategy?: "hot-wallet" | "manual-link";
+  manualBuyLinksEnabled?: boolean;
   solAmount?: number;
   ethAmount?: number;
   walletAddress?: string;
@@ -311,6 +313,9 @@ export class TelegramUpdateService implements OnModuleInit {
         ["گزارش کوین‌های آنرمال"],
         ["وضعیت خرید تست"],
         ["فعال‌سازی خرید تست", "توقف خرید تست"],
+        ["فعال‌سازی خرید واقعی", "بازگشت به dry-run"],
+        ["روش هات ولت", "روش لینک دستی"],
+        ["فعال‌سازی لینک دستی", "توقف لینک دستی"],
         [
           "مبلغ خرید 0.01 سولانا",
           "مبلغ خرید 0.05 سولانا",
@@ -395,6 +400,12 @@ export class TelegramUpdateService implements OnModuleInit {
       "وضعیت خرید تست",
       "فعال‌سازی خرید تست",
       "توقف خرید تست",
+      "فعال‌سازی خرید واقعی",
+      "بازگشت به dry-run",
+      "روش هات ولت",
+      "روش لینک دستی",
+      "فعال‌سازی لینک دستی",
+      "توقف لینک دستی",
       "مبلغ خرید 0.01 سولانا",
       "مبلغ خرید 0.05 سولانا",
       "مبلغ خرید 0.1 سولانا",
@@ -430,6 +441,30 @@ export class TelegramUpdateService implements OnModuleInit {
       settings.enabled = false;
     }
 
+    if (text === "فعال‌سازی خرید واقعی") {
+      settings.mode = "live";
+    }
+
+    if (text === "بازگشت به dry-run") {
+      settings.mode = "dry-run";
+    }
+
+    if (text === "روش هات ولت") {
+      settings.executionStrategy = "hot-wallet";
+    }
+
+    if (text === "روش لینک دستی") {
+      settings.executionStrategy = "manual-link";
+    }
+
+    if (text === "فعال‌سازی لینک دستی") {
+      settings.manualBuyLinksEnabled = true;
+    }
+
+    if (text === "توقف لینک دستی") {
+      settings.manualBuyLinksEnabled = false;
+    }
+
     const amountMatch = text.match(/مبلغ خرید ([0-9.]+) سولانا/);
 
     if (amountMatch) {
@@ -454,7 +489,9 @@ export class TelegramUpdateService implements OnModuleInit {
       settings.autoBuyDropThresholdPercent = Number(autoBuyThresholdMatch[1]);
     }
 
-    settings.mode = "dry-run";
+    settings.mode = settings.mode ?? "dry-run";
+    settings.executionStrategy = settings.executionStrategy ?? "hot-wallet";
+    settings.manualBuyLinksEnabled = settings.manualBuyLinksEnabled ?? false;
     this.saveTradeSettings(settings);
 
     await this.sendText(
@@ -468,6 +505,8 @@ export class TelegramUpdateService implements OnModuleInit {
     const defaults: TradeSettingsState = {
       enabled: false,
       mode: "dry-run",
+      executionStrategy: "hot-wallet",
+      manualBuyLinksEnabled: false,
       solAmount: 0.01,
       ethAmount: 0.002,
       walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
@@ -528,6 +567,8 @@ export class TelegramUpdateService implements OnModuleInit {
       "وضعیت تنظیمات خرید تست",
       `فعال بودن: ${settings.enabled ? "بله" : "نه"}`,
       `حالت اجرا: ${settings.mode ?? "dry-run"}`,
+      `روش اجرا: ${settings.executionStrategy ?? "hot-wallet"}`,
+      `لینک خرید دستی: ${settings.manualBuyLinksEnabled ? "فعال" : "غیرفعال"}`,
       `مبلغ هر خرید: ${settings.solAmount ?? 0.01} SOL`,
       `مبلغ هر خرید اتریوم: ${settings.ethAmount ?? 0.002} ETH`,
       `ولیت: ${settings.walletAddress ?? "تنظیم نشده"}`,

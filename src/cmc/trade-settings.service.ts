@@ -22,7 +22,6 @@ export class TradeSettingsService {
     const settings = {
       ...this.getSettings(),
       ...input,
-      mode: "dry-run" as const,
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });
@@ -35,6 +34,8 @@ export class TradeSettingsService {
     return [
       `وضعیت بررسی خرید تست: ${settings.enabled ? "فعال" : "غیرفعال"}`,
       `حالت اجرا: ${settings.mode}`,
+      `روش اجرا: ${settings.executionStrategy}`,
+      `لینک خرید دستی: ${settings.manualBuyLinksEnabled ? "فعال" : "غیرفعال"}`,
       `مبلغ هر خرید: ${settings.solAmount} SOL`,
       `مبلغ هر خرید اتریوم: ${settings.ethAmount} ETH`,
       `ولیت: ${settings.walletAddress || "تنظیم نشده"}`,
@@ -51,7 +52,12 @@ export class TradeSettingsService {
   private getDefaultSettings(): TradeSettings {
     return {
       enabled: this.getBoolean("TRADE_VALIDATION_ENABLED", false),
-      mode: "dry-run",
+      mode: this.getMode("TRADE_MODE", "dry-run"),
+      executionStrategy: this.getExecutionStrategy(
+        "TRADE_EXECUTION_STRATEGY",
+        "hot-wallet",
+      ),
+      manualBuyLinksEnabled: this.getBoolean("TRADE_MANUAL_BUY_LINKS_ENABLED", false),
       solAmount: this.getNumber("TRADE_SOL_AMOUNT", 0.01, 0.001, 10),
       ethAmount: this.getNumber("TRADE_ETH_AMOUNT", 0.002, 0.0001, 10),
       walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
@@ -121,6 +127,21 @@ export class TradeSettingsService {
     }
 
     return Math.min(Math.max(value, min), max);
+  }
+
+  private getMode(key: string, fallback: "dry-run" | "live"): "dry-run" | "live" {
+    const value = this.configService.get<string>(key);
+
+    return value === "live" ? "live" : fallback;
+  }
+
+  private getExecutionStrategy(
+    key: string,
+    fallback: "hot-wallet" | "manual-link",
+  ): "hot-wallet" | "manual-link" {
+    const value = this.configService.get<string>(key);
+
+    return value === "manual-link" ? "manual-link" : fallback;
   }
 
   private getList(key: string, fallback: string[]): string[] {

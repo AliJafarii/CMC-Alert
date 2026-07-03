@@ -7,6 +7,7 @@ import { CmcCryptoCurrency } from "./cmc.types";
 import { CoinGeckoService } from "./coingecko.service";
 import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
+import { TradeExecutionService } from "./trade-execution.service";
 import { TradeValidationService } from "./trade-validation.service";
 
 interface ProcessCoinsResult {
@@ -27,6 +28,7 @@ export class CmcPollerService implements OnModuleInit {
     private readonly coinGeckoService: CoinGeckoService,
     private readonly priceAnomalyService: PriceAnomalyService,
     private readonly priceAlertService: PriceAlertService,
+    private readonly tradeExecutionService: TradeExecutionService,
     private readonly tradeValidationService: TradeValidationService,
     private readonly telegramNotifierService: TelegramNotifierService,
   ) {}
@@ -133,8 +135,10 @@ export class CmcPollerService implements OnModuleInit {
           continue;
         }
 
-        const validationText = tradeResult.enabled
-          ? this.tradeValidationService.formatResult(tradeResult)
+        const executedTradeResult =
+          await this.tradeExecutionService.executeIfNeeded(tradeResult);
+        const validationText = executedTradeResult.enabled
+          ? this.tradeValidationService.formatResult(executedTradeResult)
           : undefined;
         const isSent =
           await this.telegramNotifierService.sendPriceDropAlert(

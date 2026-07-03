@@ -1,6 +1,8 @@
 export interface TradeSettings {
   enabled: boolean;
-  mode: "dry-run";
+  mode: "dry-run" | "live";
+  executionStrategy: "hot-wallet" | "manual-link";
+  manualBuyLinksEnabled: boolean;
   solAmount: number;
   ethAmount: number;
   walletAddress: string;
@@ -38,6 +40,11 @@ export interface TradeValidationResult {
   nativeSymbol?: string;
   walletNativeBalance?: number;
   requestedNativeAmount?: number;
+  executionStatus?: "skipped" | "dry-run" | "submitted" | "failed";
+  executionTxId?: string;
+  executionUrl?: string;
+  executionError?: string;
+  manualBuyUrl?: string;
   walletSolBalance?: number;
   requestedSolAmount?: number;
   dryRun: boolean;

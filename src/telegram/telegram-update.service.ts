@@ -41,6 +41,7 @@ interface AnomalyStateEntry {
   name?: string;
   symbol?: string;
   slug?: string;
+  sourceUrl?: string;
   reason?: string;
 }
 
@@ -205,6 +206,7 @@ export class TelegramUpdateService implements OnModuleInit {
           `اسلاگ: ${entry.slug ?? "n/a"}`,
           `زمان بررسی: ${entry.checkedAt ?? "n/a"}`,
           `دلیل: ${entry.reason ?? "n/a"}`,
+          `لینک: ${this.getAnomalyUrl(entry)}`,
         ].join("\n"),
       ),
     ];
@@ -319,6 +321,22 @@ export class TelegramUpdateService implements OnModuleInit {
       this.logger.warn(`Failed to read anomaly state: ${message}`);
       return [];
     }
+  }
+
+  private getAnomalyUrl(entry: AnomalyStateEntry): string {
+    if (entry.sourceUrl) {
+      return entry.sourceUrl;
+    }
+
+    if (!entry.slug) {
+      return "n/a";
+    }
+
+    if (entry.source === "CoinGecko") {
+      return `https://www.coingecko.com/en/coins/${entry.slug}`;
+    }
+
+    return `https://coinmarketcap.com/currencies/${entry.slug}/`;
   }
 
   private loadOffset(): number {

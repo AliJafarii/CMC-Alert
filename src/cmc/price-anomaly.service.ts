@@ -29,6 +29,7 @@ interface AnomalyCacheEntry {
   name: string;
   symbol: string;
   slug: string;
+  sourceUrl: string;
   reason: string;
 }
 
@@ -78,6 +79,9 @@ export class PriceAnomalyService {
         name: coin.name,
         symbol: coin.symbol,
         slug: coin.slug,
+        sourceUrl:
+          coin.sourceUrl ??
+          `https://coinmarketcap.com/currencies/${coin.slug}/`,
         reason,
       });
       this.save();

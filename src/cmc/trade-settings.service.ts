@@ -40,6 +40,7 @@ export class TradeSettingsService {
       `حداقل نقدینگی: ${settings.minLiquidityUsd} دلار`,
       `شبکه فعال: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
       `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
+      `آستانه خرید خودکار: ${-Math.abs(settings.autoBuyDropThresholdPercent)}%`,
       `DEXهای مجاز سولانا: ${settings.allowedSolanaDexIds.join(", ")}`,
     ].join("\n");
   }
@@ -53,6 +54,12 @@ export class TradeSettingsService {
       solanaOnly: this.getBoolean("TRADE_SOLANA_ONLY", true),
       minLiquidityUsd: this.getNumber("TRADE_MIN_LIQUIDITY_USD", 1000, 0, 1_000_000),
       showHighRiskAlerts: this.getBoolean("TRADE_SHOW_HIGH_RISK_ALERTS", true),
+      autoBuyDropThresholdPercent: this.getNumber(
+        "TRADE_AUTO_BUY_DROP_THRESHOLD_PERCENT",
+        80,
+        1,
+        99,
+      ),
       allowedSolanaDexIds: this.getList("TRADE_ALLOWED_SOLANA_DEX_IDS", [
         "raydium",
         "orca",

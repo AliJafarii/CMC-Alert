@@ -53,6 +53,7 @@ interface TradeSettingsState {
   solanaOnly?: boolean;
   minLiquidityUsd?: number;
   showHighRiskAlerts?: boolean;
+  autoBuyDropThresholdPercent?: number;
   allowedSolanaDexIds?: string[];
 }
 
@@ -317,6 +318,11 @@ export class TelegramUpdateService implements OnModuleInit {
           "نقدینگی 5000 دلار",
         ],
         ["نقدینگی 10000 دلار"],
+        [
+          "آستانه خرید -80 درصد",
+          "آستانه خرید -85 درصد",
+          "آستانه خرید -90 درصد",
+        ],
       ],
       resize_keyboard: true,
       one_time_keyboard: false,
@@ -387,6 +393,9 @@ export class TelegramUpdateService implements OnModuleInit {
       "نقدینگی 1000 دلار",
       "نقدینگی 5000 دلار",
       "نقدینگی 10000 دلار",
+      "آستانه خرید -80 درصد",
+      "آستانه خرید -85 درصد",
+      "آستانه خرید -90 درصد",
     ].includes(text);
   }
 
@@ -421,6 +430,12 @@ export class TelegramUpdateService implements OnModuleInit {
       settings.minLiquidityUsd = Number(liquidityMatch[1]);
     }
 
+    const autoBuyThresholdMatch = text.match(/آستانه خرید -([0-9.]+) درصد/);
+
+    if (autoBuyThresholdMatch) {
+      settings.autoBuyDropThresholdPercent = Number(autoBuyThresholdMatch[1]);
+    }
+
     settings.mode = "dry-run";
     this.saveTradeSettings(settings);
 
@@ -440,6 +455,7 @@ export class TelegramUpdateService implements OnModuleInit {
       solanaOnly: true,
       minLiquidityUsd: 1000,
       showHighRiskAlerts: true,
+      autoBuyDropThresholdPercent: 80,
       allowedSolanaDexIds: [
         "raydium",
         "orca",
@@ -488,6 +504,7 @@ export class TelegramUpdateService implements OnModuleInit {
       `شبکه: ${settings.solanaOnly ? "فقط Solana" : "چندشبکه‌ای"}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd ?? 1000} دلار`,
       `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
+      `آستانه خرید خودکار: -${settings.autoBuyDropThresholdPercent ?? 80}%`,
       `DEXهای مجاز: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,
     ].join("\n");
   }

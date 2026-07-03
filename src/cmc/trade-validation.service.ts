@@ -116,6 +116,9 @@ export class TradeValidationService {
       const riskResult = await this.checkSolanaRisk(tokenAddress);
 
       if (riskResult.highRisk) {
+        const priceChange1h = this.getOneHourPriceChange(coin);
+        const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
+
         if (!settings.showHighRiskAlerts) {
           return this.reject(
             settings,
@@ -137,6 +140,33 @@ export class TradeValidationService {
           pairUrl: dexResult.url,
           liquidityUsd: dexResult.liquidity?.usd,
           riskSummary: riskResult.summary,
+          priceChange1hPercent: priceChange1h,
+          autoBuyDropThresholdPercent: autoBuyThreshold,
+          requestedSolAmount: settings.solAmount,
+          dryRun: true,
+        };
+      }
+
+      const priceChange1h = this.getOneHourPriceChange(coin);
+      const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
+      const meetsAutoBuyDrop =
+        priceChange1h !== undefined && priceChange1h <= autoBuyThreshold;
+
+      if (!meetsAutoBuyDrop) {
+        return {
+          enabled: true,
+          accepted: true,
+          decision: "review",
+          reason: `قابل بررسی برای خرید است، اما افت یک‌ساعته هنوز به آستانه خرید خودکار ${autoBuyThreshold}% نرسیده است.`,
+          chain: "solana",
+          tokenAddress,
+          explorerUrl,
+          dexId: dexResult.dexId,
+          pairUrl: dexResult.url,
+          liquidityUsd: dexResult.liquidity?.usd,
+          riskSummary: riskResult.summary,
+          priceChange1hPercent: priceChange1h,
+          autoBuyDropThresholdPercent: autoBuyThreshold,
           requestedSolAmount: settings.solAmount,
           dryRun: true,
         };
@@ -161,6 +191,8 @@ export class TradeValidationService {
         pairUrl: dexResult.url,
         liquidityUsd: dexResult.liquidity?.usd,
         riskSummary: riskResult.summary,
+        priceChange1hPercent: priceChange1h,
+        autoBuyDropThresholdPercent: autoBuyThreshold,
         walletSolBalance,
         requestedSolAmount: settings.solAmount,
         dryRun: true,
@@ -185,6 +217,16 @@ export class TradeValidationService {
       `لینک pair: ${result.pairUrl ?? "n/a"}`,
       `نقدینگی دلاری: ${result.liquidityUsd ?? "n/a"}`,
       `ریسک سولانا: ${result.riskSummary ?? "n/a"}`,
+      `افت یک‌ساعته: ${
+        result.priceChange1hPercent === undefined
+          ? "n/a"
+          : `${result.priceChange1hPercent.toFixed(2)}%`
+      }`,
+      `آستانه خرید خودکار: ${
+        result.autoBuyDropThresholdPercent === undefined
+          ? "n/a"
+          : `${result.autoBuyDropThresholdPercent}%`
+      }`,
       `موجودی ولت: ${result.walletSolBalance ?? "n/a"} SOL`,
       `مبلغ خرید تست: ${result.requestedSolAmount ?? "n/a"} SOL`,
       `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
@@ -349,6 +391,10 @@ export class TradeValidationService {
     }
 
     return (response.data.result?.value ?? 0) / 1_000_000_000;
+  }
+
+  private getOneHourPriceChange(coin: CmcCryptoCurrency): number | undefined {
+    return coin.quotes?.find((quote) => quote.name === "USD")?.percentChange1h;
   }
 
   private async checkSolanaRisk(tokenAddress: string): Promise<SolanaRiskResult> {

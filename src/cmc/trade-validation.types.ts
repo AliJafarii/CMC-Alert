@@ -6,6 +6,7 @@ export interface TradeSettings {
   solanaOnly: boolean;
   minLiquidityUsd: number;
   showHighRiskAlerts: boolean;
+  autoBuyDropThresholdPercent: number;
   allowedSolanaDexIds: string[];
 }
 
@@ -28,6 +29,8 @@ export interface TradeValidationResult {
   pairUrl?: string;
   liquidityUsd?: number;
   riskSummary?: string;
+  priceChange1hPercent?: number;
+  autoBuyDropThresholdPercent?: number;
   walletSolBalance?: number;
   requestedSolAmount?: number;
   dryRun: boolean;

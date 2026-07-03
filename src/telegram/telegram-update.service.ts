@@ -27,6 +27,12 @@ interface TelegramMessage {
   };
 }
 
+interface TelegramReplyMarkup {
+  keyboard: string[][];
+  resize_keyboard: boolean;
+  one_time_keyboard: boolean;
+}
+
 interface AnomalyStateEntry {
   checkedAt?: string;
   isAnomalous?: boolean;
@@ -132,6 +138,7 @@ export class TelegramUpdateService implements OnModuleInit {
       await this.sendText(
         chatId,
         "بات فعال شد. از این به بعد هشدارهای ریزش یک‌ساعته را دریافت می‌کنی.",
+        this.getAdminReplyMarkup(chatId),
       );
       return;
     }
@@ -149,11 +156,15 @@ export class TelegramUpdateService implements OnModuleInit {
       await this.sendText(
         chatId,
         `بات روشن است. تعداد subscriberها: ${this.subscriberRepository.count()}`,
+        this.getAdminReplyMarkup(chatId),
       );
       return;
     }
 
-    if (text.startsWith("/anomalies")) {
+    if (
+      text.startsWith("/anomalies") ||
+      text === "گزارش کوین‌های آنرمال"
+    ) {
       await this.handleAnomaliesCommand(chatId, text);
     }
   }
@@ -201,7 +212,11 @@ export class TelegramUpdateService implements OnModuleInit {
     await this.sendLongText(chatId, lines.join("\n\n"));
   }
 
-  private async sendText(chatId: string, text: string): Promise<void> {
+  private async sendText(
+    chatId: string,
+    text: string,
+    replyMarkup?: TelegramReplyMarkup,
+  ): Promise<void> {
     const botToken = this.configService.get<string>("TELEGRAM_BOT_TOKEN");
 
     if (!botToken) {
@@ -214,6 +229,7 @@ export class TelegramUpdateService implements OnModuleInit {
         {
           chat_id: chatId,
           text,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
         },
         {
           timeout: 15000,
@@ -245,17 +261,35 @@ export class TelegramUpdateService implements OnModuleInit {
   }
 
   private isAdmin(chatId: string): boolean {
-    const adminChatIds = (
+    const adminConfig =
       this.configService.get<string>("TELEGRAM_ADMIN_CHAT_IDS") ??
-      this.configService.get<string>("TELEGRAM_ADMIN_CHAT_ID") ??
-      this.configService.get<string>("TELEGRAM_CHAT_ID") ??
-      ""
-    )
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+      this.configService.get<string>("TELEGRAM_ADMIN_CHAT_ID");
+    const adminChatIds = this.parseChatIds(
+      adminConfig ?? this.configService.get<string>("TELEGRAM_CHAT_ID") ?? "",
+    );
 
     return adminChatIds.includes(chatId);
+  }
+
+  private getAdminReplyMarkup(
+    chatId: string,
+  ): TelegramReplyMarkup | undefined {
+    if (!this.isAdmin(chatId)) {
+      return undefined;
+    }
+
+    return {
+      keyboard: [["گزارش کوین‌های آنرمال"]],
+      resize_keyboard: true,
+      one_time_keyboard: false,
+    };
+  }
+
+  private parseChatIds(value: string): string[] {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 
   private parseLimit(text: string): number {

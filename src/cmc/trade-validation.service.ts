@@ -62,6 +62,7 @@ export class TradeValidationService {
       return {
         enabled: false,
         accepted: false,
+        decision: "disabled",
         reason: "بررسی خرید تست غیرفعال است.",
         dryRun: true,
       };
@@ -96,13 +97,15 @@ export class TradeValidationService {
 
       const walletSolBalance = await this.fetchWalletBalance(settings.walletAddress);
       const hasBalance = walletSolBalance >= settings.solAmount;
+      const decision = hasBalance ? "auto_buy" : "review";
       const reason = hasBalance
-        ? "مرحله دوم پاس شد و خرید در حالت dry-run ثبت شد."
-        : "موجودی SOL برای خرید تست کافی نیست.";
+        ? "مجاز برای خرید خودکار است و خرید در حالت dry-run ثبت شد."
+        : "قابل بررسی برای خرید است، اما موجودی SOL برای خرید خودکار کافی نیست.";
 
       return {
         enabled: true,
-        accepted: hasBalance,
+        accepted: true,
+        decision,
         reason,
         chain: "solana",
         tokenAddress,
@@ -125,6 +128,7 @@ export class TradeValidationService {
     return [
       "نتیجه مرحله دوم خرید تست",
       `وضعیت: ${result.accepted ? "قبول" : "رد"}`,
+      `دسته: ${this.formatDecision(result.decision)}`,
       `دلیل: ${result.reason}`,
       `شبکه: ${result.chain ?? "n/a"}`,
       `آدرس توکن: ${result.tokenAddress ?? "n/a"}`,
@@ -136,6 +140,17 @@ export class TradeValidationService {
       `مبلغ خرید تست: ${result.requestedSolAmount ?? "n/a"} SOL`,
       `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
     ].join("\n");
+  }
+
+  private formatDecision(decision: TradeValidationResult["decision"]): string {
+    const labels: Record<TradeValidationResult["decision"], string> = {
+      disabled: "غیرفعال",
+      rejected: "رد شده",
+      review: "قابل بررسی برای خرید",
+      auto_buy: "مجاز برای خرید خودکار",
+    };
+
+    return labels[decision];
   }
 
   private async findSolanaExplorerUrl(
@@ -287,6 +302,7 @@ export class TradeValidationService {
     return {
       enabled: true,
       accepted: false,
+      decision: "rejected",
       reason,
       chain: settings.solanaOnly ? "solana" : undefined,
       tokenAddress,

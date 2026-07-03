@@ -8,9 +8,12 @@ export interface TradeSettings {
   allowedSolanaDexIds: string[];
 }
 
+export type TradeDecision = "disabled" | "rejected" | "review" | "auto_buy";
+
 export interface TradeValidationResult {
   enabled: boolean;
   accepted: boolean;
+  decision: TradeDecision;
   reason: string;
   chain?: string;
   tokenAddress?: string;

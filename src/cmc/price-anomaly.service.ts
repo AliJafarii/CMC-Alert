@@ -38,6 +38,8 @@ interface AnomalyStats {
   pumps: number;
   maxDrop: number;
   maxPump: number;
+  flatMoveRatio: number;
+  nonTinyMoves: number;
   pointCount: number;
 }
 
@@ -183,18 +185,32 @@ export class PriceAnomalyService {
     const returns = this.calculateReturns(points);
     const minDropPercent = this.getMinDropPercent();
     const minPumpPercent = this.getMinPumpPercent();
+    const flatMoves = returns.filter(
+      (value) => Math.abs(value) < this.getFlatMovePercent(),
+    ).length;
+    const nonTinyMoves = returns.filter(
+      (value) => Math.abs(value) >= this.getTinyMovePercent(),
+    ).length;
     const stats: AnomalyStats = {
       drops: returns.filter((value) => value <= minDropPercent).length,
       pumps: returns.filter((value) => value >= minPumpPercent).length,
       maxDrop: returns.length ? Math.min(...returns) : 0,
       maxPump: returns.length ? Math.max(...returns) : 0,
+      flatMoveRatio: returns.length ? flatMoves / returns.length : 0,
+      nonTinyMoves,
       pointCount: points.length,
     };
 
+    const repeatedDropPump =
+      stats.drops >= this.getMinDropCount() &&
+      stats.pumps >= this.getMinPumpCount();
+    const sparseSevereDrop =
+      stats.maxDrop <= this.getSparseDropPercent() &&
+      stats.nonTinyMoves <= this.getSparseMoveLimit() &&
+      stats.flatMoveRatio >= this.getMinFlatRatio();
+
     return {
-      isAnomalous:
-        stats.drops >= this.getMinDropCount() &&
-        stats.pumps >= this.getMinPumpCount(),
+      isAnomalous: repeatedDropPump || sparseSevereDrop,
       stats,
     };
   }
@@ -224,6 +240,8 @@ export class PriceAnomalyService {
       `pumps>=${this.getMinPumpPercent()}%: ${stats.pumps}`,
       `maxDrop=${stats.maxDrop.toFixed(2)}%`,
       `maxPump=${stats.maxPump.toFixed(2)}%`,
+      `flatRatio=${(stats.flatMoveRatio * 100).toFixed(2)}%`,
+      `nonTinyMoves=${stats.nonTinyMoves}`,
     ].join(", ");
   }
 
@@ -237,7 +255,9 @@ export class PriceAnomalyService {
 
   private isExpired(entry: AnomalyCacheEntry): boolean {
     const checkedAt = new Date(entry.checkedAt).getTime();
-    const cacheMs = this.getCacheHours() * 60 * 60 * 1000;
+    const cacheMs = entry.isAnomalous
+      ? this.getCacheHours() * 60 * 60 * 1000
+      : this.getNormalCacheMinutes() * 60 * 1000;
 
     return !Number.isFinite(checkedAt) || Date.now() - checkedAt > cacheMs;
   }
@@ -248,6 +268,10 @@ export class PriceAnomalyService {
 
   private getCacheHours(): number {
     return this.getNumber("CMC_ANOMALY_CACHE_HOURS", 24, 1, 168);
+  }
+
+  private getNormalCacheMinutes(): number {
+    return this.getNumber("CMC_ANOMALY_NORMAL_CACHE_MINUTES", 5, 1, 1440);
   }
 
   private getMinDropCount(): number {
@@ -264,6 +288,28 @@ export class PriceAnomalyService {
 
   private getMinPumpPercent(): number {
     return this.getNumber("CMC_ANOMALY_PUMP_PERCENT", 100, 1, 10000);
+  }
+
+  private getSparseDropPercent(): number {
+    return -Math.abs(
+      this.getNumber("CMC_ANOMALY_SPARSE_DROP_PERCENT", 70, 1, 99),
+    );
+  }
+
+  private getSparseMoveLimit(): number {
+    return this.getNumber("CMC_ANOMALY_SPARSE_MOVE_LIMIT", 10, 1, 100);
+  }
+
+  private getMinFlatRatio(): number {
+    return this.getNumber("CMC_ANOMALY_MIN_FLAT_RATIO_PERCENT", 75, 1, 100) / 100;
+  }
+
+  private getFlatMovePercent(): number {
+    return this.getNumber("CMC_ANOMALY_FLAT_MOVE_PERCENT", 1, 0.01, 20);
+  }
+
+  private getTinyMovePercent(): number {
+    return this.getNumber("CMC_ANOMALY_TINY_MOVE_PERCENT", 1, 0.01, 20);
   }
 
   private getNumber(

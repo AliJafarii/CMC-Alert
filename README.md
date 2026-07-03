@@ -32,6 +32,12 @@ CMC_ANOMALY_PUMP_PERCENT=100
 CMC_ANOMALY_MIN_DROPS=2
 CMC_ANOMALY_MIN_PUMPS=2
 CMC_ANOMALY_CACHE_HOURS=24
+CMC_ANOMALY_NORMAL_CACHE_MINUTES=5
+CMC_ANOMALY_SPARSE_DROP_PERCENT=70
+CMC_ANOMALY_SPARSE_MOVE_LIMIT=10
+CMC_ANOMALY_MIN_FLAT_RATIO_PERCENT=75
+CMC_ANOMALY_FLAT_MOVE_PERCENT=1
+CMC_ANOMALY_TINY_MOVE_PERCENT=1
 COINGECKO_PAGES_PER_POLL=1
 TELEGRAM_BOT_TOKEN="put-your-token-here"
 TELEGRAM_CHAT_ID="optional-default-chat-id"
@@ -48,11 +54,13 @@ admin-only anomaly reports. If omitted, the bot falls back to
 `TELEGRAM_ADMIN_CHAT_ID`, then `TELEGRAM_CHAT_ID`.
 
 The anomaly filter checks seven-day price history before sending a drop alert.
-By default it suppresses a coin only when the history has at least two drops of
-50% or more and at least two rebounds of 100% or more. This catches binary,
-fake-looking histories such as Polymath while avoiding coins that only drift or
-drop without repeated explosive rebounds. Results are cached in
-`data/price-anomaly-state.json` for 24 hours.
+By default it suppresses a coin when the history has at least two drops of 50%
+or more and at least two rebounds of 100% or more. It also suppresses sparse
+histories that were almost flat for the week and then suddenly dropped at least
+70%, which catches cases such as NuCoin before the rebound is visible. Positive
+anomaly results are cached in `data/price-anomaly-state.json` for 24 hours;
+normal results are rechecked after 5 minutes so delayed chart updates can still
+be caught.
 
 ## systemd
 

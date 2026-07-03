@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import {
   Connection,
   Keypair,
+  PublicKey,
   VersionedTransaction,
 } from "@solana/web3.js";
 import bs58 from "bs58";
@@ -30,6 +31,18 @@ interface JupiterQuoteResponse {
   inAmount?: string;
   outAmount?: string;
   routePlan?: unknown[];
+}
+
+interface ParsedMintAccount {
+  value?: {
+    data?: {
+      parsed?: {
+        info?: {
+          decimals?: number;
+        };
+      };
+    };
+  };
 }
 
 interface JupiterSwapResponse {
@@ -136,6 +149,10 @@ export class TradeExecutionService {
         "https://api.mainnet-beta.solana.com",
       "confirmed",
     );
+    const outputDecimals = await this.fetchSolanaMintDecimals(
+      connection,
+      result.tokenAddress,
+    );
     const signature = await connection.sendRawTransaction(transaction.serialize(), {
       maxRetries: 3,
       skipPreflight: false,
@@ -144,11 +161,31 @@ export class TradeExecutionService {
     await connection.confirmTransaction(signature, "confirmed");
 
     result.executionStatus = "submitted";
+    result.executionInputAmount = result.requestedNativeAmount;
+    result.executionInputSymbol = "SOL";
+    result.executionOutputAmountRaw = quote.outAmount;
+    result.executionOutputAmount =
+      quote.outAmount && outputDecimals !== undefined
+        ? Number(quote.outAmount) / 10 ** outputDecimals
+        : undefined;
+    result.executionOutputTokenAddress = result.tokenAddress;
+    result.executionSlippageBps = slippageBps;
     result.executionTxId = signature;
     result.executionUrl = `https://solscan.io/tx/${signature}`;
     result.dryRun = false;
     result.reason = "خرید واقعی سولانا با hot wallet ارسال شد.";
     return result;
+  }
+
+  private async fetchSolanaMintDecimals(
+    connection: Connection,
+    tokenAddress: string,
+  ): Promise<number | undefined> {
+    const accountInfo = (await connection.getParsedAccountInfo(
+      new PublicKey(tokenAddress),
+    )) as ParsedMintAccount;
+
+    return accountInfo.value?.data?.parsed?.info?.decimals;
   }
 
   private async fetchJupiterQuote(

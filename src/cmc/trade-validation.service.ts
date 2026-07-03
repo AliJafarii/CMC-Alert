@@ -259,6 +259,17 @@ export class TradeValidationService {
       }`,
       `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
       `وضعیت اجرای خرید: ${result.executionStatus ?? "n/a"}`,
+      `مقدار پرداختی: ${result.executionInputAmount ?? "n/a"} ${
+        result.executionInputSymbol ?? result.nativeSymbol ?? "n/a"
+      }`,
+      `مقدار دریافتی تقریبی: ${result.executionOutputAmount ?? "n/a"}`,
+      `مقدار دریافتی خام: ${result.executionOutputAmountRaw ?? "n/a"}`,
+      `توکن دریافتی: ${result.executionOutputTokenAddress ?? "n/a"}`,
+      `اسلیپیج خرید: ${
+        result.executionSlippageBps === undefined
+          ? "n/a"
+          : `${result.executionSlippageBps / 100}%`
+      }`,
       `شناسه تراکنش: ${result.executionTxId ?? "n/a"}`,
       `لینک تراکنش: ${result.executionUrl ?? "n/a"}`,
       `خطای اجرا: ${result.executionError ?? "n/a"}`,

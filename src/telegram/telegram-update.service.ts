@@ -2,6 +2,8 @@ import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { formatEther, JsonRpcProvider } from "ethers";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { firstValueFrom } from "rxjs";
@@ -61,6 +63,15 @@ interface TradeSettingsState {
   autoBuyDropThresholdPercent?: number;
   allowedSolanaDexIds?: string[];
   allowedEthereumDexIds?: string[];
+}
+
+interface TradingHotWalletFile {
+  solana?: {
+    publicKey?: string;
+  };
+  ethereum?: {
+    address?: string;
+  };
 }
 
 @Injectable()
@@ -312,12 +323,17 @@ export class TelegramUpdateService implements OnModuleInit {
       keyboard: [
         ["گزارش کوین‌های آنرمال"],
         ["وضعیت خرید تست"],
+        ["موجودی هات ولت"],
         ["فعال‌سازی خرید تست", "توقف خرید تست"],
         ["فعال‌سازی خرید واقعی", "بازگشت به dry-run"],
         ["روش هات ولت", "روش لینک دستی"],
         ["فعال‌سازی لینک دستی", "توقف لینک دستی"],
         [
+          "مبلغ خرید 0.002 سولانا",
+          "مبلغ خرید 0.005 سولانا",
           "مبلغ خرید 0.01 سولانا",
+        ],
+        [
           "مبلغ خرید 0.05 سولانا",
           "مبلغ خرید 0.1 سولانا",
         ],
@@ -398,6 +414,7 @@ export class TelegramUpdateService implements OnModuleInit {
   private isTradeSettingsCommand(text: string): boolean {
     return [
       "وضعیت خرید تست",
+      "موجودی هات ولت",
       "فعال‌سازی خرید تست",
       "توقف خرید تست",
       "فعال‌سازی خرید واقعی",
@@ -406,6 +423,8 @@ export class TelegramUpdateService implements OnModuleInit {
       "روش لینک دستی",
       "فعال‌سازی لینک دستی",
       "توقف لینک دستی",
+      "مبلغ خرید 0.002 سولانا",
+      "مبلغ خرید 0.005 سولانا",
       "مبلغ خرید 0.01 سولانا",
       "مبلغ خرید 0.05 سولانا",
       "مبلغ خرید 0.1 سولانا",
@@ -432,6 +451,15 @@ export class TelegramUpdateService implements OnModuleInit {
     }
 
     const settings = this.loadTradeSettings();
+
+    if (text === "موجودی هات ولت") {
+      await this.sendText(
+        chatId,
+        await this.formatHotWalletBalances(),
+        this.getAdminReplyMarkup(chatId),
+      );
+      return;
+    }
 
     if (text === "فعال‌سازی خرید تست") {
       settings.enabled = true;
@@ -580,6 +608,73 @@ export class TelegramUpdateService implements OnModuleInit {
       `DEXهای مجاز سولانا: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,
       `DEXهای مجاز اتریوم: ${(settings.allowedEthereumDexIds ?? []).join(", ")}`,
     ].join("\n");
+  }
+
+  private async formatHotWalletBalances(): Promise<string> {
+    const wallet = this.loadHotWallet();
+    const solanaAddress = wallet.solana?.publicKey ?? "تنظیم نشده";
+    const ethereumAddress = wallet.ethereum?.address ?? "تنظیم نشده";
+    const solanaBalance =
+      wallet.solana?.publicKey === undefined
+        ? "n/a"
+        : await this.getSolanaBalance(wallet.solana.publicKey);
+    const ethereumBalance =
+      wallet.ethereum?.address === undefined
+        ? "n/a"
+        : await this.getEthereumBalance(wallet.ethereum.address);
+
+    return [
+      "موجودی hot wallet تست",
+      "",
+      `آدرس سولانا: ${solanaAddress}`,
+      `موجودی سولانا: ${solanaBalance} SOL`,
+      "",
+      `آدرس اتریوم: ${ethereumAddress}`,
+      `موجودی اتریوم: ${ethereumBalance} ETH`,
+    ].join("\n");
+  }
+
+  private loadHotWallet(): TradingHotWalletFile {
+    const walletPath =
+      this.configService.get<string>("TRADE_HOT_WALLET_PATH") ??
+      join(process.cwd(), "secrets", "test-hot-wallet.json");
+
+    if (!existsSync(walletPath)) {
+      return {};
+    }
+
+    return JSON.parse(readFileSync(walletPath, "utf8")) as TradingHotWalletFile;
+  }
+
+  private async getSolanaBalance(publicKey: string): Promise<string> {
+    try {
+      const connection = new Connection(
+        this.configService.get<string>("SOLANA_RPC_URL") ??
+          "https://api.mainnet-beta.solana.com",
+        "confirmed",
+      );
+      const lamports = await connection.getBalance(new PublicKey(publicKey));
+
+      return String(lamports / 1_000_000_000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `خطا: ${message}`;
+    }
+  }
+
+  private async getEthereumBalance(address: string): Promise<string> {
+    try {
+      const provider = new JsonRpcProvider(
+        this.configService.get<string>("ETH_RPC_URL") ??
+          "https://ethereum-rpc.publicnode.com",
+      );
+      const wei = await provider.getBalance(address);
+
+      return formatEther(wei);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `خطا: ${message}`;
+    }
   }
 
   private loadOffset(): number {

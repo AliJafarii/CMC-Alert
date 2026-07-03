@@ -41,6 +41,12 @@ export interface TradeValidationResult {
   walletNativeBalance?: number;
   requestedNativeAmount?: number;
   executionStatus?: "skipped" | "dry-run" | "submitted" | "failed";
+  executionInputAmount?: number;
+  executionInputSymbol?: string;
+  executionOutputAmount?: number;
+  executionOutputAmountRaw?: string;
+  executionOutputTokenAddress?: string;
+  executionSlippageBps?: number;
   executionTxId?: string;
   executionUrl?: string;
   executionError?: string;

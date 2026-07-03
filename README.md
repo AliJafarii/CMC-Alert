@@ -26,6 +26,12 @@ Copy `.env.example` to `.env` if you want to change defaults.
 CMC_PAGE_LIMIT=5000
 CMC_POLL_CRON="0 * * * * *"
 CMC_ALERT_THRESHOLD_PERCENT=-70
+CMC_ANOMALY_LOOKBACK_DAYS=7
+CMC_ANOMALY_DROP_PERCENT=50
+CMC_ANOMALY_PUMP_PERCENT=100
+CMC_ANOMALY_MIN_DROPS=2
+CMC_ANOMALY_MIN_PUMPS=2
+CMC_ANOMALY_CACHE_HOURS=24
 COINGECKO_PAGES_PER_POLL=1
 TELEGRAM_BOT_TOKEN="put-your-token-here"
 TELEGRAM_CHAT_ID="optional-default-chat-id"
@@ -36,6 +42,13 @@ TELEGRAM_CHAT_ID="optional-default-chat-id"
 in one hour.
 `TELEGRAM_CHAT_ID` is optional; users can subscribe with `/start`, but setting a
 default chat id seeds the first subscriber on startup.
+
+The anomaly filter checks seven-day price history before sending a drop alert.
+By default it suppresses a coin only when the history has at least two drops of
+50% or more and at least two rebounds of 100% or more. This catches binary,
+fake-looking histories such as Polymath while avoiding coins that only drift or
+drop without repeated explosive rebounds. Results are cached in
+`data/price-anomaly-state.json` for 24 hours.
 
 ## systemd
 
@@ -54,6 +67,9 @@ Every minute the bot checks coins and sends a Telegram alert when the USD quote
 passes the configured one-hour drop threshold. CoinMarketCap is fetched first,
 sorted by one-hour change from lowest to highest, and paginated until the full
 CMC list is checked.
+Before an alert is sent, the bot loads seven days of price history for that coin
+from the matching source and suppresses coins with repeated extreme drop/pump
+behavior.
 CoinMarketCap has priority: CoinGecko coins already present in the current
 CoinMarketCap listing are skipped to avoid duplicate alerts. CoinGecko is read
 from its market list in pages of 250 coins and sorted by the one-hour change

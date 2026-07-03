@@ -5,11 +5,14 @@ import { AlertStateService } from "./alert-state.service";
 import { CmcService } from "./cmc.service";
 import { CmcCryptoCurrency } from "./cmc.types";
 import { CoinGeckoService } from "./coingecko.service";
+import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
 
 interface ProcessCoinsResult {
   alertCount: number;
   alerts: string[];
+  suppressedCount: number;
+  suppressed: string[];
 }
 
 @Injectable()
@@ -21,6 +24,7 @@ export class CmcPollerService implements OnModuleInit {
     private readonly alertStateService: AlertStateService,
     private readonly cmcService: CmcService,
     private readonly coinGeckoService: CoinGeckoService,
+    private readonly priceAnomalyService: PriceAnomalyService,
     private readonly priceAlertService: PriceAlertService,
     private readonly telegramNotifierService: TelegramNotifierService,
   ) {}
@@ -57,18 +61,28 @@ export class CmcPollerService implements OnModuleInit {
       );
       const coinGeckoResult = await this.processCoins(coinGeckoOnlyCoins);
       const totalAlertCount = cmcResult.alertCount + coinGeckoResult.alertCount;
+      const totalSuppressedCount =
+        cmcResult.suppressedCount + coinGeckoResult.suppressedCount;
 
       this.logger.log(
         [
           `Fetched ${coins.length} CMC coins and ${coinGeckoCoins.length} CoinGecko coins (${coinGeckoOnlyCoins.length} after CMC priority filter).`,
           `Worst CMC: ${this.describeWorstCoin(coins)}.`,
           `Worst CoinGecko: ${this.describeWorstCoin(coinGeckoOnlyCoins)}.`,
-          `Sent ${totalAlertCount} new Telegram alerts below ${this.priceAlertService.thresholdPercent}%`,
+          `Sent ${totalAlertCount} new Telegram alerts below ${this.priceAlertService.thresholdPercent}%.`,
+          `Suppressed ${totalSuppressedCount} anomalous seven-day histories.`,
         ].join(" "),
       );
 
       for (const alert of [...cmcResult.alerts, ...coinGeckoResult.alerts]) {
         this.logger.log(`Alert sent: ${alert}`);
+      }
+
+      for (const suppressed of [
+        ...cmcResult.suppressed,
+        ...coinGeckoResult.suppressed,
+      ]) {
+        this.logger.warn(`Alert suppressed: ${suppressed}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -83,6 +97,8 @@ export class CmcPollerService implements OnModuleInit {
   ): Promise<ProcessCoinsResult> {
     let alertCount = 0;
     const alerts: string[] = [];
+    let suppressedCount = 0;
+    const suppressed: string[] = [];
 
     for (const coin of coins) {
       const alert = this.priceAlertService.createDropAlert(coin);
@@ -96,6 +112,12 @@ export class CmcPollerService implements OnModuleInit {
       }
 
       if (this.alertStateService.isActive(coin)) {
+        continue;
+      }
+
+      if (await this.priceAnomalyService.isAnomalous(coin)) {
+        suppressedCount += 1;
+        suppressed.push(this.describeCoin(coin));
         continue;
       }
 
@@ -119,6 +141,8 @@ export class CmcPollerService implements OnModuleInit {
     return {
       alertCount,
       alerts,
+      suppressedCount,
+      suppressed,
     };
   }
 

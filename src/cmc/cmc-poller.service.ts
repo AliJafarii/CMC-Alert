@@ -74,7 +74,7 @@ export class CmcPollerService implements OnModuleInit {
           `Worst CMC: ${this.describeWorstCoin(coins)}.`,
           `Worst CoinGecko: ${this.describeWorstCoin(coinGeckoOnlyCoins)}.`,
           `Sent ${totalAlertCount} new Telegram alerts below ${this.priceAlertService.thresholdPercent}%.`,
-          `Suppressed ${totalSuppressedCount} anomalous seven-day histories.`,
+          `Suppressed ${totalSuppressedCount} invalid/anomalous alerts.`,
         ].join(" "),
       );
 

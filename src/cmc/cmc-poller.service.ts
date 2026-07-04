@@ -5,6 +5,7 @@ import { AlertStateService } from "./alert-state.service";
 import { CmcService } from "./cmc.service";
 import { CmcCryptoCurrency } from "./cmc.types";
 import { CoinGeckoService } from "./coingecko.service";
+import { DexMarketValidationService } from "./dex-market-validation.service";
 import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
 
@@ -24,6 +25,7 @@ export class CmcPollerService implements OnModuleInit {
     private readonly alertStateService: AlertStateService,
     private readonly cmcService: CmcService,
     private readonly coinGeckoService: CoinGeckoService,
+    private readonly dexMarketValidationService: DexMarketValidationService,
     private readonly priceAnomalyService: PriceAnomalyService,
     private readonly priceAlertService: PriceAlertService,
     private readonly telegramNotifierService: TelegramNotifierService,
@@ -122,6 +124,20 @@ export class CmcPollerService implements OnModuleInit {
       }
 
       try {
+        const marketValidation =
+          await this.dexMarketValidationService.isValidMarketMove(coin);
+
+        if (!marketValidation.accepted) {
+          this.logger.warn(
+            `Market validation rejected ${this.describeCoin(coin)}: ${marketValidation.reason}`,
+          );
+          suppressedCount += 1;
+          suppressed.push(
+            `${this.describeCoin(coin)} invalid=${marketValidation.reason}`,
+          );
+          continue;
+        }
+
         const isSent =
           await this.telegramNotifierService.sendPriceDropAlert(alert);
 

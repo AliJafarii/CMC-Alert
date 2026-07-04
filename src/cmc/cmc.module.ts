@@ -5,7 +5,6 @@ import { AlertStateService } from "./alert-state.service";
 import { CmcPollerService } from "./cmc-poller.service";
 import { CmcService } from "./cmc.service";
 import { CoinGeckoService } from "./coingecko.service";
-import { DexMarketValidationService } from "./dex-market-validation.service";
 import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
 
@@ -16,7 +15,6 @@ import { PriceAlertService } from "./price-alert.service";
     CmcService,
     CoinGeckoService,
     CmcPollerService,
-    DexMarketValidationService,
     PriceAnomalyService,
     PriceAlertService,
   ],

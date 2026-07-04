@@ -1,5 +1,5 @@
 [Unit]
-Description=Healthcheck cmc-alert bot
+Description=Healthcheck cmc-alert production and test bots
 
 [Service]
 Type=oneshot

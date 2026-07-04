@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { TelegramSubscriber } from "./subscriber.types";
 
@@ -79,10 +79,9 @@ export class SubscriberRepositoryService {
 
   private save(): void {
     mkdirSync(dirname(this.filePath), { recursive: true });
-    writeFileSync(
-      this.filePath,
-      `${JSON.stringify(this.all(), null, 2)}\n`,
-      "utf8",
-    );
+    const tempPath = `${this.filePath}.tmp`;
+
+    writeFileSync(tempPath, `${JSON.stringify(this.all(), null, 2)}\n`, "utf8");
+    renameSync(tempPath, this.filePath);
   }
 }

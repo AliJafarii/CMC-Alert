@@ -1,5 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { CmcCryptoCurrency } from "./cmc.types";
 
@@ -69,9 +75,12 @@ export class AlertStateService {
 
   private save(): void {
     mkdirSync(dirname(this.filePath), { recursive: true });
+    const tempPath = `${this.filePath}.tmp`;
+
     writeFileSync(
-      this.filePath,
+      tempPath,
       `${JSON.stringify([...this.activeAlertKeys].sort(), null, 2)}\n`,
     );
+    renameSync(tempPath, this.filePath);
   }
 }

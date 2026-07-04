@@ -1,7 +1,13 @@
 import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { firstValueFrom } from "rxjs";
 import { CmcCryptoCurrency, CoinGeckoMarketCoin } from "./cmc.types";
@@ -203,6 +209,9 @@ export class CoinGeckoService {
 
   private saveState(state: CoinGeckoState): void {
     mkdirSync(dirname(this.statePath), { recursive: true });
-    writeFileSync(this.statePath, `${JSON.stringify(state, null, 2)}\n`);
+    const tempPath = `${this.statePath}.tmp`;
+
+    writeFileSync(tempPath, `${JSON.stringify(state, null, 2)}\n`);
+    renameSync(tempPath, this.statePath);
   }
 }

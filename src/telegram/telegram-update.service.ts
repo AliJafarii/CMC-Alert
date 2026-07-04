@@ -2,7 +2,13 @@ import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { firstValueFrom } from "rxjs";
 import { SubscriberRepositoryService } from "./subscriber-repository.service";
@@ -162,10 +168,7 @@ export class TelegramUpdateService implements OnModuleInit {
       return;
     }
 
-    if (
-      text.startsWith("/anomalies") ||
-      text === "گزارش کوین‌های آنرمال"
-    ) {
+    if (text.startsWith("/anomalies") || text === "گزارش کوین‌های آنرمال") {
       await this.handleAnomaliesCommand(chatId, text);
     }
   }
@@ -273,9 +276,7 @@ export class TelegramUpdateService implements OnModuleInit {
     return adminChatIds.includes(chatId);
   }
 
-  private getAdminReplyMarkup(
-    chatId: string,
-  ): TelegramReplyMarkup | undefined {
+  private getAdminReplyMarkup(chatId: string): TelegramReplyMarkup | undefined {
     if (!this.isAdmin(chatId)) {
       return undefined;
     }
@@ -353,10 +354,13 @@ export class TelegramUpdateService implements OnModuleInit {
 
   private saveOffset(): void {
     mkdirSync(dirname(this.statePath), { recursive: true });
+    const tempPath = `${this.statePath}.tmp`;
+
     writeFileSync(
-      this.statePath,
+      tempPath,
       `${JSON.stringify({ offset: this.offset }, null, 2)}\n`,
       "utf8",
     );
+    renameSync(tempPath, this.statePath);
   }
 }

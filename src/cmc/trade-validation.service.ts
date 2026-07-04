@@ -51,15 +51,28 @@ interface DexScreenerPair {
   dexId?: string;
   url?: string;
   pairAddress?: string;
+  baseToken?: {
+    address?: string;
+    symbol?: string;
+  };
+  quoteToken?: {
+    address?: string;
+    symbol?: string;
+  };
+  txns?: Record<string, { buys?: number; sells?: number }>;
+  volume?: Record<string, number>;
+  priceChange?: Record<string, number>;
   liquidity?: {
     usd?: number;
   };
 }
 
 interface JsonRpcBalanceResponse {
-  result?: {
-    value?: number;
-  } | string;
+  result?:
+    | {
+        value?: number;
+      }
+    | string;
   error?: {
     message?: string;
   };
@@ -156,6 +169,18 @@ export class TradeValidationService {
         return this.reject(
           settings,
           "جفت معاملاتی معتبر با DEX مجاز و نقدینگی کافی پیدا نشد.",
+          tokenInfo.tokenAddress,
+          tokenInfo.explorerUrl,
+          tokenInfo.chain,
+        );
+      }
+
+      const marketValidation = this.validateDexMarketMove(dexResult, settings);
+
+      if (!marketValidation.accepted) {
+        return this.reject(
+          settings,
+          marketValidation.reason,
           tokenInfo.tokenAddress,
           tokenInfo.explorerUrl,
           tokenInfo.chain,
@@ -274,11 +299,15 @@ export class TradeValidationService {
     }
 
     if (result.walletNativeBalance !== undefined && result.nativeSymbol) {
-      lines.push(`موجودی ولت: ${result.walletNativeBalance} ${result.nativeSymbol}`);
+      lines.push(
+        `موجودی ولت: ${result.walletNativeBalance} ${result.nativeSymbol}`,
+      );
     }
 
     if (result.requestedNativeAmount !== undefined && result.nativeSymbol) {
-      lines.push(`مبلغ خرید تست: ${result.requestedNativeAmount} ${result.nativeSymbol}`);
+      lines.push(
+        `مبلغ خرید تست: ${result.requestedNativeAmount} ${result.nativeSymbol}`,
+      );
     }
 
     lines.push(`حالت اجرا: ${result.dryRun ? "dry-run" : "live"}`);
@@ -317,7 +346,10 @@ export class TradeValidationService {
     }
 
     if (result.executionStatus === "submitted") {
-      return ["وضعیت اجرای خرید: ارسال شد", ...this.formatSubmittedTradeLines(result)];
+      return [
+        "وضعیت اجرای خرید: ارسال شد",
+        ...this.formatSubmittedTradeLines(result),
+      ];
     }
 
     return ["وضعیت اجرای خرید: هنوز به مرحله اجرا نرسیده"];
@@ -328,7 +360,9 @@ export class TradeValidationService {
     const inputSymbol = result.executionInputSymbol ?? result.nativeSymbol;
 
     if (result.executionInputAmount !== undefined && inputSymbol) {
-      lines.push(`مقدار پرداختی: ${result.executionInputAmount} ${inputSymbol}`);
+      lines.push(
+        `مقدار پرداختی: ${result.executionInputAmount} ${inputSymbol}`,
+      );
     }
 
     if (result.executionOutputTokenAddress) {
@@ -387,9 +421,13 @@ export class TradeValidationService {
       walletNativeBalance: input.walletNativeBalance,
       requestedNativeAmount: input.tokenInfo.requestedAmount,
       walletSolBalance:
-        input.tokenInfo.chain === "solana" ? input.walletNativeBalance : undefined,
+        input.tokenInfo.chain === "solana"
+          ? input.walletNativeBalance
+          : undefined,
       requestedSolAmount:
-        input.tokenInfo.chain === "solana" ? input.tokenInfo.requestedAmount : undefined,
+        input.tokenInfo.chain === "solana"
+          ? input.tokenInfo.requestedAmount
+          : undefined,
       dryRun: true,
     };
   }
@@ -494,14 +532,18 @@ export class TradeValidationService {
       const explorerUrl =
         detail.data?.urls?.explorer?.find((url) =>
           this.extractSolanaTokenAddress(url),
-        ) ??
-        this.getCmcPlatformExplorer(detail, "solana");
+        ) ?? this.getCmcPlatformExplorer(detail, "solana");
       const tokenAddress = explorerUrl
         ? this.extractSolanaTokenAddress(explorerUrl)
         : null;
 
       if (explorerUrl && tokenAddress) {
-        return this.createTokenInfo("solana", tokenAddress, explorerUrl, settings);
+        return this.createTokenInfo(
+          "solana",
+          tokenAddress,
+          explorerUrl,
+          settings,
+        );
       }
     }
 
@@ -558,7 +600,12 @@ export class TradeValidationService {
         : null;
 
       if (explorerUrl && tokenAddress) {
-        return this.createTokenInfo("solana", tokenAddress, explorerUrl, settings);
+        return this.createTokenInfo(
+          "solana",
+          tokenAddress,
+          explorerUrl,
+          settings,
+        );
       }
     }
 
@@ -652,10 +699,71 @@ export class TradeValidationService {
       (response.data.pairs ?? [])
         .filter((pair) => pair.chainId === tokenInfo.chain)
         .filter((pair) => allowedDexIds.has((pair.dexId ?? "").toLowerCase()))
-        .filter((pair) => (pair.liquidity?.usd ?? 0) >= settings.minLiquidityUsd)
-        .sort((first, second) => (second.liquidity?.usd ?? 0) - (first.liquidity?.usd ?? 0))[0] ??
-      null
+        .filter((pair) => this.isPairForToken(pair, tokenInfo.tokenAddress))
+        .filter(
+          (pair) => (pair.liquidity?.usd ?? 0) >= settings.minLiquidityUsd,
+        )
+        .sort(
+          (first, second) =>
+            (second.liquidity?.usd ?? 0) - (first.liquidity?.usd ?? 0),
+        )[0] ?? null
     );
+  }
+
+  private validateDexMarketMove(
+    pair: DexScreenerPair,
+    settings: TradeSettings,
+  ): { accepted: boolean; reason: string } {
+    const dexChange1h = pair.priceChange?.h1;
+    const volumeH1 = pair.volume?.h1 ?? 0;
+    const txnsH1 = this.countTxns(pair.txns?.h1);
+    const threshold = settings.dexDropThresholdPercent;
+
+    if (dexChange1h === undefined) {
+      return {
+        accepted: false,
+        reason:
+          "کوین نامعتبر شد: DexScreener تغییر قیمت یک‌ساعته برای pair اصلی ندارد.",
+      };
+    }
+
+    if (dexChange1h > threshold) {
+      return {
+        accepted: false,
+        reason: `کوین نامعتبر شد: افت یک‌ساعته DEX تایید نشد. افت منبع با DEX هم‌خوان نیست؛ DEX=${dexChange1h.toFixed(2)}%، آستانه=${threshold}%.`,
+      };
+    }
+
+    if (volumeH1 < settings.minDexVolumeH1Usd) {
+      return {
+        accepted: false,
+        reason: `کوین نامعتبر شد: حجم یک‌ساعته DEX کافی نیست. حجم=${volumeH1} دلار، حداقل=${settings.minDexVolumeH1Usd} دلار.`,
+      };
+    }
+
+    if (txnsH1 < settings.minDexTxnsH1) {
+      return {
+        accepted: false,
+        reason: `کوین نامعتبر شد: تعداد معاملات یک‌ساعته DEX کافی نیست. تعداد=${txnsH1}، حداقل=${settings.minDexTxnsH1}.`,
+      };
+    }
+
+    return {
+      accepted: true,
+      reason: "نوسان یک‌ساعته DEX تایید شد.",
+    };
+  }
+
+  private isPairForToken(pair: DexScreenerPair, tokenAddress: string): boolean {
+    const normalizedTokenAddress = tokenAddress.toLowerCase();
+
+    return [pair.baseToken?.address, pair.quoteToken?.address].some(
+      (address) => address?.toLowerCase() === normalizedTokenAddress,
+    );
+  }
+
+  private countTxns(txns?: { buys?: number; sells?: number }): number {
+    return (txns?.buys ?? 0) + (txns?.sells ?? 0);
   }
 
   private async fetchWalletBalance(tokenInfo: TradeTokenInfo): Promise<number> {
@@ -752,7 +860,8 @@ export class TradeValidationService {
             .join(" | ")
         : "ریسک جدی از RugCheck گزارش نشد.";
       const lowLpLock =
-        response.data.lpLockedPct !== undefined && response.data.lpLockedPct < 50;
+        response.data.lpLockedPct !== undefined &&
+        response.data.lpLockedPct < 50;
       const highScore =
         response.data.score_normalised !== undefined &&
         response.data.score_normalised >= 60;
@@ -831,8 +940,9 @@ export class TradeValidationService {
         response.data.result?.[tokenAddress.toLowerCase()] ??
         response.data.result?.[tokenAddress];
       const unlockedLp =
-        security?.lp_holders?.some((holder) => String(holder.is_locked) !== "1") ??
-        false;
+        security?.lp_holders?.some(
+          (holder) => String(holder.is_locked) !== "1",
+        ) ?? false;
 
       highRisk =
         highRisk ||
@@ -879,7 +989,11 @@ export class TradeValidationService {
   }
 
   private formatChainName(chain: string): string {
-    return chain === "ethereum" ? "اتریوم" : chain === "solana" ? "سولانا" : chain;
+    return chain === "ethereum"
+      ? "اتریوم"
+      : chain === "solana"
+        ? "سولانا"
+        : chain;
   }
 
   private formatChain(chain: SupportedChain): string {
@@ -901,8 +1015,10 @@ export class TradeValidationService {
       chain,
       tokenAddress,
       explorerUrl,
-      requestedNativeAmount: chain === "ethereum" ? settings.ethAmount : settings.solAmount,
-      nativeSymbol: chain === "ethereum" ? "ETH" : chain === "solana" ? "SOL" : undefined,
+      requestedNativeAmount:
+        chain === "ethereum" ? settings.ethAmount : settings.solAmount,
+      nativeSymbol:
+        chain === "ethereum" ? "ETH" : chain === "solana" ? "SOL" : undefined,
       dryRun: true,
     };
   }

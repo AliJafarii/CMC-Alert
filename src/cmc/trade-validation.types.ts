@@ -10,6 +10,9 @@ export interface TradeSettings {
   solanaOnly: boolean;
   enabledChains: string[];
   minLiquidityUsd: number;
+  minDexVolumeH1Usd: number;
+  minDexTxnsH1: number;
+  dexDropThresholdPercent: number;
   showHighRiskAlerts: boolean;
   autoBuyDropThresholdPercent: number;
   allowedSolanaDexIds: string[];
@@ -17,11 +20,7 @@ export interface TradeSettings {
 }
 
 export type TradeDecision =
-  | "disabled"
-  | "rejected"
-  | "high_risk"
-  | "review"
-  | "auto_buy";
+  "disabled" | "rejected" | "high_risk" | "review" | "auto_buy";
 
 export interface TradeValidationResult {
   enabled: boolean;

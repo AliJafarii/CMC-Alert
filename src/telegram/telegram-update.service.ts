@@ -59,6 +59,9 @@ interface TradeSettingsState {
   solanaOnly?: boolean;
   enabledChains?: string[];
   minLiquidityUsd?: number;
+  minDexVolumeH1Usd?: number;
+  minDexTxnsH1?: number;
+  dexDropThresholdPercent?: number;
   showHighRiskAlerts?: boolean;
   autoBuyDropThresholdPercent?: number;
   allowedSolanaDexIds?: string[];
@@ -196,10 +199,7 @@ export class TelegramUpdateService implements OnModuleInit {
       return;
     }
 
-    if (
-      text.startsWith("/anomalies") ||
-      text === "گزارش کوین‌های آنرمال"
-    ) {
+    if (text.startsWith("/anomalies") || text === "گزارش کوین‌های آنرمال") {
       await this.handleAnomaliesCommand(chatId, text);
       return;
     }
@@ -312,9 +312,7 @@ export class TelegramUpdateService implements OnModuleInit {
     return adminChatIds.includes(chatId);
   }
 
-  private getAdminReplyMarkup(
-    chatId: string,
-  ): TelegramReplyMarkup | undefined {
+  private getAdminReplyMarkup(chatId: string): TelegramReplyMarkup | undefined {
     if (!this.isAdmin(chatId)) {
       return undefined;
     }
@@ -333,20 +331,13 @@ export class TelegramUpdateService implements OnModuleInit {
           "مبلغ خرید 0.005 سولانا",
           "مبلغ خرید 0.01 سولانا",
         ],
-        [
-          "مبلغ خرید 0.05 سولانا",
-          "مبلغ خرید 0.1 سولانا",
-        ],
+        ["مبلغ خرید 0.05 سولانا", "مبلغ خرید 0.1 سولانا"],
         [
           "مبلغ خرید 0.001 اتریوم",
           "مبلغ خرید 0.002 اتریوم",
           "مبلغ خرید 0.005 اتریوم",
         ],
-        [
-          "نقدینگی 500 دلار",
-          "نقدینگی 1000 دلار",
-          "نقدینگی 5000 دلار",
-        ],
+        ["نقدینگی 500 دلار", "نقدینگی 1000 دلار", "نقدینگی 5000 دلار"],
         ["نقدینگی 10000 دلار"],
         [
           "آستانه خرید -80 درصد",
@@ -537,11 +528,16 @@ export class TelegramUpdateService implements OnModuleInit {
       manualBuyLinksEnabled: false,
       solAmount: 0.01,
       ethAmount: 0.002,
-      walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
-      ethWalletAddress: this.configService.get<string>("ETH_WALLET_ADDRESS") ?? "",
+      walletAddress:
+        this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
+      ethWalletAddress:
+        this.configService.get<string>("ETH_WALLET_ADDRESS") ?? "",
       solanaOnly: true,
       enabledChains: ["solana", "ethereum"],
       minLiquidityUsd: 1000,
+      minDexVolumeH1Usd: 1000,
+      minDexTxnsH1: 20,
+      dexDropThresholdPercent: -70,
       showHighRiskAlerts: true,
       autoBuyDropThresholdPercent: 80,
       allowedSolanaDexIds: [
@@ -603,6 +599,9 @@ export class TelegramUpdateService implements OnModuleInit {
       `ولت اتریوم: ${settings.ethWalletAddress || "تنظیم نشده"}`,
       `شبکه‌ها: ${(settings.enabledChains ?? ["solana", "ethereum"]).join(", ")}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd ?? 1000} دلار`,
+      `حداقل حجم یک‌ساعته DEX: ${settings.minDexVolumeH1Usd ?? 1000} دلار`,
+      `حداقل تعداد معامله یک‌ساعته DEX: ${settings.minDexTxnsH1 ?? 20}`,
+      `آستانه تایید ریزش DEX: ${settings.dexDropThresholdPercent ?? -70}%`,
       `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
       `آستانه خرید خودکار: -${settings.autoBuyDropThresholdPercent ?? 80}%`,
       `DEXهای مجاز سولانا: ${(settings.allowedSolanaDexIds ?? []).join(", ")}`,

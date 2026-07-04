@@ -7,7 +7,11 @@ import { TradeSettings } from "./trade-validation.types";
 @Injectable()
 export class TradeSettingsService {
   private readonly logger = new Logger(TradeSettingsService.name);
-  private readonly filePath = join(process.cwd(), "data", "trade-settings.json");
+  private readonly filePath = join(
+    process.cwd(),
+    "data",
+    "trade-settings.json",
+  );
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -25,7 +29,11 @@ export class TradeSettingsService {
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });
-    writeFileSync(this.filePath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    writeFileSync(
+      this.filePath,
+      `${JSON.stringify(settings, null, 2)}\n`,
+      "utf8",
+    );
 
     return settings;
   }
@@ -41,6 +49,9 @@ export class TradeSettingsService {
       `ولیت: ${settings.walletAddress || "تنظیم نشده"}`,
       `ولت اتریوم: ${settings.ethWalletAddress || "تنظیم نشده"}`,
       `حداقل نقدینگی: ${settings.minLiquidityUsd} دلار`,
+      `حداقل حجم یک‌ساعته DEX: ${settings.minDexVolumeH1Usd} دلار`,
+      `حداقل تعداد معامله یک‌ساعته DEX: ${settings.minDexTxnsH1}`,
+      `آستانه تایید ریزش DEX: ${settings.dexDropThresholdPercent}%`,
       `شبکه‌های فعال: ${settings.enabledChains.join(", ")}`,
       `نمایش موارد پرریسک: ${settings.showHighRiskAlerts ? "فعال" : "غیرفعال"}`,
       `آستانه خرید خودکار: ${-Math.abs(settings.autoBuyDropThresholdPercent)}%`,
@@ -57,17 +68,37 @@ export class TradeSettingsService {
         "TRADE_EXECUTION_STRATEGY",
         "hot-wallet",
       ),
-      manualBuyLinksEnabled: this.getBoolean("TRADE_MANUAL_BUY_LINKS_ENABLED", false),
+      manualBuyLinksEnabled: this.getBoolean(
+        "TRADE_MANUAL_BUY_LINKS_ENABLED",
+        false,
+      ),
       solAmount: this.getNumber("TRADE_SOL_AMOUNT", 0.01, 0.001, 10),
       ethAmount: this.getNumber("TRADE_ETH_AMOUNT", 0.002, 0.0001, 10),
-      walletAddress: this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
-      ethWalletAddress: this.configService.get<string>("ETH_WALLET_ADDRESS") ?? "",
+      walletAddress:
+        this.configService.get<string>("SOLANA_WALLET_ADDRESS") ?? "",
+      ethWalletAddress:
+        this.configService.get<string>("ETH_WALLET_ADDRESS") ?? "",
       solanaOnly: this.getBoolean("TRADE_SOLANA_ONLY", true),
       enabledChains: this.getList("TRADE_ENABLED_CHAINS", [
         "solana",
         "ethereum",
       ]),
-      minLiquidityUsd: this.getNumber("TRADE_MIN_LIQUIDITY_USD", 1000, 0, 1_000_000),
+      minLiquidityUsd: this.getNumber(
+        "TRADE_MIN_LIQUIDITY_USD",
+        1000,
+        0,
+        1_000_000,
+      ),
+      minDexVolumeH1Usd: this.getNumber(
+        "TRADE_MIN_DEX_VOLUME_H1_USD",
+        1000,
+        0,
+        1_000_000,
+      ),
+      minDexTxnsH1: this.getNumber("TRADE_MIN_DEX_TXNS_H1", 20, 0, 1_000),
+      dexDropThresholdPercent: -Math.abs(
+        this.getNumber("TRADE_DEX_DROP_THRESHOLD_PERCENT", 70, 1, 99),
+      ),
       showHighRiskAlerts: this.getBoolean("TRADE_SHOW_HIGH_RISK_ALERTS", true),
       autoBuyDropThresholdPercent: this.getNumber(
         "TRADE_AUTO_BUY_DROP_THRESHOLD_PERCENT",
@@ -101,7 +132,9 @@ export class TradeSettingsService {
     }
 
     try {
-      return JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<TradeSettings>;
+      return JSON.parse(
+        readFileSync(this.filePath, "utf8"),
+      ) as Partial<TradeSettings>;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Failed to read trade settings: ${message}`);
@@ -119,7 +152,12 @@ export class TradeSettingsService {
     return ["1", "true", "yes", "on"].includes(value.toLowerCase());
   }
 
-  private getNumber(key: string, fallback: number, min: number, max: number): number {
+  private getNumber(
+    key: string,
+    fallback: number,
+    min: number,
+    max: number,
+  ): number {
     const value = Number(this.configService.get<string>(key) ?? fallback);
 
     if (!Number.isFinite(value)) {
@@ -129,7 +167,10 @@ export class TradeSettingsService {
     return Math.min(Math.max(value, min), max);
   }
 
-  private getMode(key: string, fallback: "dry-run" | "live"): "dry-run" | "live" {
+  private getMode(
+    key: string,
+    fallback: "dry-run" | "live",
+  ): "dry-run" | "live" {
     const value = this.configService.get<string>(key);
 
     return value === "live" ? "live" : fallback;

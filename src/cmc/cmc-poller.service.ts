@@ -132,6 +132,10 @@ export class CmcPollerService implements OnModuleInit {
           this.logger.warn(
             `Trade validation rejected ${this.describeCoin(coin)}: ${tradeResult.reason}`,
           );
+          suppressedCount += 1;
+          suppressed.push(
+            `${this.describeCoin(coin)} invalid=${tradeResult.reason}`,
+          );
           continue;
         }
 
@@ -140,11 +144,10 @@ export class CmcPollerService implements OnModuleInit {
         const validationText = executedTradeResult.enabled
           ? this.tradeValidationService.formatResult(executedTradeResult)
           : undefined;
-        const isSent =
-          await this.telegramNotifierService.sendPriceDropAlert(
-            alert,
-            validationText,
-          );
+        const isSent = await this.telegramNotifierService.sendPriceDropAlert(
+          alert,
+          validationText,
+        );
 
         if (isSent) {
           this.alertStateService.markTriggered(coin);

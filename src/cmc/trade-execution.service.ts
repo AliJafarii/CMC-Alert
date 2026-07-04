@@ -73,6 +73,8 @@ export class TradeExecutionService {
       result.manualBuyUrl = this.createManualBuyUrl(result);
     }
 
+    result.dryRun = settings.mode !== "live";
+
     if (result.decision !== "auto_buy") {
       result.executionStatus = "skipped";
       return result;
@@ -87,6 +89,7 @@ export class TradeExecutionService {
     if (settings.executionStrategy === "manual-link") {
       result.executionStatus = "skipped";
       result.manualBuyUrl = this.createManualBuyUrl(result);
+      result.dryRun = false;
       result.reason =
         "مجاز برای خرید است، اما روش اجرا روی لینک دستی است و تراکنش خودکار ارسال نشد.";
       return result;

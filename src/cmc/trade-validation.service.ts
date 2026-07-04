@@ -165,6 +165,7 @@ export class TradeValidationService {
       const riskResult = await this.checkRisk(tokenInfo);
       const priceChange1h = this.getOneHourPriceChange(coin);
       const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
+      const walletNativeBalance = await this.fetchWalletBalance(tokenInfo);
 
       if (riskResult.highRisk) {
         if (!settings.showHighRiskAlerts) {
@@ -186,6 +187,7 @@ export class TradeValidationService {
           priceChange1h,
           autoBuyThreshold,
           settings,
+          walletNativeBalance,
         });
       }
 
@@ -205,13 +207,12 @@ export class TradeValidationService {
         });
       }
 
-      const walletNativeBalance = await this.fetchWalletBalance(tokenInfo);
       const hasBalance = walletNativeBalance >= tokenInfo.requestedAmount;
 
       return this.result({
         decision: hasBalance ? "auto_buy" : "review",
         reason: hasBalance
-          ? "مجاز برای خرید خودکار است و خرید در حالت dry-run ثبت شد."
+          ? "مجاز برای خرید خودکار است و وارد مرحله اجرای خرید شد."
           : `قابل بررسی برای خرید است، اما موجودی ${tokenInfo.nativeSymbol} برای خرید خودکار کافی نیست.`,
         tokenInfo,
         dexResult,
@@ -229,52 +230,132 @@ export class TradeValidationService {
   }
 
   formatResult(result: TradeValidationResult): string {
-    return [
+    const lines = [
       "نتیجه مرحله دوم خرید تست",
       `وضعیت: ${this.formatStatus(result)}`,
       `دسته: ${this.formatDecision(result.decision)}`,
       `دلیل: ${result.reason}`,
-      `شبکه: ${result.chain ?? "n/a"}`,
-      `آدرس توکن: ${result.tokenAddress ?? "n/a"}`,
-      `لینک explorer: ${result.explorerUrl ?? "n/a"}`,
-      `صرافی معتبر: ${result.dexId ?? "n/a"}`,
-      `لینک pair: ${result.pairUrl ?? "n/a"}`,
-      `نقدینگی دلاری: ${result.liquidityUsd ?? "n/a"}`,
-      `ریسک شبکه: ${result.riskSummary ?? "n/a"}`,
-      `افت یک‌ساعته: ${
-        result.priceChange1hPercent === undefined
-          ? "n/a"
-          : `${result.priceChange1hPercent.toFixed(2)}%`
-      }`,
-      `آستانه خرید خودکار: ${
-        result.autoBuyDropThresholdPercent === undefined
-          ? "n/a"
-          : `${result.autoBuyDropThresholdPercent}%`
-      }`,
-      `موجودی ولت: ${result.walletNativeBalance ?? "n/a"} ${
-        result.nativeSymbol ?? "n/a"
-      }`,
-      `مبلغ خرید تست: ${result.requestedNativeAmount ?? "n/a"} ${
-        result.nativeSymbol ?? "n/a"
-      }`,
-      `حالت خرید: ${result.dryRun ? "dry-run" : "live"}`,
-      `وضعیت اجرای خرید: ${result.executionStatus ?? "n/a"}`,
-      `مقدار پرداختی: ${result.executionInputAmount ?? "n/a"} ${
-        result.executionInputSymbol ?? result.nativeSymbol ?? "n/a"
-      }`,
-      `مقدار دریافتی تقریبی: ${result.executionOutputAmount ?? "n/a"}`,
-      `مقدار دریافتی خام: ${result.executionOutputAmountRaw ?? "n/a"}`,
-      `توکن دریافتی: ${result.executionOutputTokenAddress ?? "n/a"}`,
-      `اسلیپیج خرید: ${
-        result.executionSlippageBps === undefined
-          ? "n/a"
-          : `${result.executionSlippageBps / 100}%`
-      }`,
-      `شناسه تراکنش: ${result.executionTxId ?? "n/a"}`,
-      `لینک تراکنش: ${result.executionUrl ?? "n/a"}`,
-      `خطای اجرا: ${result.executionError ?? "n/a"}`,
-      `لینک خرید دستی: ${result.manualBuyUrl ?? "n/a"}`,
-    ].join("\n");
+    ];
+
+    if (result.chain) {
+      lines.push(`شبکه: ${this.formatChainName(result.chain)}`);
+    }
+
+    if (result.tokenAddress) {
+      lines.push(`آدرس توکن: ${result.tokenAddress}`);
+    }
+
+    if (result.explorerUrl) {
+      lines.push(`لینک explorer: ${result.explorerUrl}`);
+    }
+
+    if (result.dexId) {
+      lines.push(`صرافی معتبر: ${result.dexId}`);
+    }
+
+    if (result.pairUrl) {
+      lines.push(`لینک pair: ${result.pairUrl}`);
+    }
+
+    if (result.liquidityUsd !== undefined) {
+      lines.push(`نقدینگی دلاری: ${result.liquidityUsd}`);
+    }
+
+    if (result.riskSummary) {
+      lines.push(`ریسک شبکه: ${result.riskSummary}`);
+    }
+
+    if (result.priceChange1hPercent !== undefined) {
+      lines.push(`افت یک‌ساعته: ${result.priceChange1hPercent.toFixed(2)}%`);
+    }
+
+    if (result.autoBuyDropThresholdPercent !== undefined) {
+      lines.push(`آستانه خرید خودکار: ${result.autoBuyDropThresholdPercent}%`);
+    }
+
+    if (result.walletNativeBalance !== undefined && result.nativeSymbol) {
+      lines.push(`موجودی ولت: ${result.walletNativeBalance} ${result.nativeSymbol}`);
+    }
+
+    if (result.requestedNativeAmount !== undefined && result.nativeSymbol) {
+      lines.push(`مبلغ خرید تست: ${result.requestedNativeAmount} ${result.nativeSymbol}`);
+    }
+
+    lines.push(`حالت اجرا: ${result.dryRun ? "dry-run" : "live"}`);
+    lines.push(...this.formatExecutionLines(result));
+
+    if (result.manualBuyUrl) {
+      lines.push(`لینک خرید دستی: ${result.manualBuyUrl}`);
+    }
+
+    return lines.join("\n");
+  }
+
+  private formatExecutionLines(result: TradeValidationResult): string[] {
+    if (result.executionStatus === "skipped") {
+      return ["وضعیت اجرای خرید: انجام نشد"];
+    }
+
+    if (result.executionStatus === "dry-run") {
+      const amount =
+        result.requestedNativeAmount === undefined || !result.nativeSymbol
+          ? undefined
+          : `${result.requestedNativeAmount} ${result.nativeSymbol}`;
+
+      return [
+        "وضعیت اجرای خرید: dry-run",
+        ...(amount ? [`مقدار پرداختی برنامه‌ریزی‌شده: ${amount}`] : []),
+      ];
+    }
+
+    if (result.executionStatus === "failed") {
+      return [
+        "وضعیت اجرای خرید: ناموفق",
+        ...this.formatSubmittedTradeLines(result),
+        `خطای اجرا: ${result.executionError ?? "خطای نامشخص"}`,
+      ];
+    }
+
+    if (result.executionStatus === "submitted") {
+      return ["وضعیت اجرای خرید: ارسال شد", ...this.formatSubmittedTradeLines(result)];
+    }
+
+    return ["وضعیت اجرای خرید: هنوز به مرحله اجرا نرسیده"];
+  }
+
+  private formatSubmittedTradeLines(result: TradeValidationResult): string[] {
+    const lines: string[] = [];
+    const inputSymbol = result.executionInputSymbol ?? result.nativeSymbol;
+
+    if (result.executionInputAmount !== undefined && inputSymbol) {
+      lines.push(`مقدار پرداختی: ${result.executionInputAmount} ${inputSymbol}`);
+    }
+
+    if (result.executionOutputTokenAddress) {
+      lines.push(`توکن دریافتی: ${result.executionOutputTokenAddress}`);
+    }
+
+    if (result.executionOutputAmount !== undefined) {
+      lines.push(`مقدار دریافتی تقریبی: ${result.executionOutputAmount}`);
+    }
+
+    if (result.executionOutputAmountRaw) {
+      lines.push(`مقدار دریافتی خام: ${result.executionOutputAmountRaw}`);
+    }
+
+    if (result.executionSlippageBps !== undefined) {
+      lines.push(`اسلیپیج خرید: ${result.executionSlippageBps / 100}%`);
+    }
+
+    if (result.executionTxId) {
+      lines.push(`شناسه تراکنش: ${result.executionTxId}`);
+    }
+
+    if (result.executionUrl) {
+      lines.push(`لینک تراکنش: ${result.executionUrl}`);
+    }
+
+    return lines;
   }
 
   private result(input: {
@@ -795,6 +876,10 @@ export class TradeValidationService {
       text.includes("single holder") ||
       text.includes("high holder concentration")
     );
+  }
+
+  private formatChainName(chain: string): string {
+    return chain === "ethereum" ? "اتریوم" : chain === "solana" ? "سولانا" : chain;
   }
 
   private formatChain(chain: SupportedChain): string {

@@ -175,18 +175,6 @@ export class TradeValidationService {
         );
       }
 
-      const marketValidation = this.validateDexMarketMove(dexResult, settings);
-
-      if (!marketValidation.accepted) {
-        return this.reject(
-          settings,
-          marketValidation.reason,
-          tokenInfo.tokenAddress,
-          tokenInfo.explorerUrl,
-          tokenInfo.chain,
-        );
-      }
-
       const riskResult = await this.checkRisk(tokenInfo);
       const priceChange1h = this.getOneHourPriceChange(coin);
       const autoBuyThreshold = -Math.abs(settings.autoBuyDropThresholdPercent);
@@ -704,60 +692,12 @@ export class TradeValidationService {
     );
   }
 
-  private validateDexMarketMove(
-    pair: DexScreenerPair,
-    settings: TradeSettings,
-  ): { accepted: boolean; reason: string } {
-    const dexChange1h = pair.priceChange?.h1;
-    const volumeH1 = pair.volume?.h1 ?? 0;
-    const txnsH1 = this.countTxns(pair.txns?.h1);
-    const threshold = settings.dexDropThresholdPercent;
-
-    if (dexChange1h === undefined) {
-      return {
-        accepted: false,
-        reason:
-          "کوین نامعتبر شد: DexScreener تغییر قیمت یک‌ساعته برای pair اصلی ندارد.",
-      };
-    }
-
-    if (dexChange1h > threshold) {
-      return {
-        accepted: false,
-        reason: `کوین نامعتبر شد: افت یک‌ساعته DEX تایید نشد. افت منبع با DEX هم‌خوان نیست؛ DEX=${dexChange1h.toFixed(2)}%، آستانه=${threshold}%.`,
-      };
-    }
-
-    if (volumeH1 < settings.minDexVolumeH1Usd) {
-      return {
-        accepted: false,
-        reason: `کوین نامعتبر شد: حجم یک‌ساعته DEX کافی نیست. حجم=${volumeH1} دلار، حداقل=${settings.minDexVolumeH1Usd} دلار.`,
-      };
-    }
-
-    if (txnsH1 < settings.minDexTxnsH1) {
-      return {
-        accepted: false,
-        reason: `کوین نامعتبر شد: تعداد معاملات یک‌ساعته DEX کافی نیست. تعداد=${txnsH1}، حداقل=${settings.minDexTxnsH1}.`,
-      };
-    }
-
-    return {
-      accepted: true,
-      reason: "نوسان یک‌ساعته DEX تایید شد.",
-    };
-  }
-
   private isPairForToken(pair: DexScreenerPair, tokenAddress: string): boolean {
     const normalizedTokenAddress = tokenAddress.toLowerCase();
 
     return [pair.baseToken?.address, pair.quoteToken?.address].some(
       (address) => address?.toLowerCase() === normalizedTokenAddress,
     );
-  }
-
-  private countTxns(txns?: { buys?: number; sells?: number }): number {
-    return (txns?.buys ?? 0) + (txns?.sells ?? 0);
   }
 
   private async fetchWalletBalance(tokenInfo: TradeTokenInfo): Promise<number> {

@@ -196,8 +196,14 @@ export class DexMarketValidationService {
           item.contractChainId === 1 ||
           item.contractPlatform?.toLowerCase() === "ethereum",
       );
-      const explorerUrl = platform?.contractExplorerUrl;
-      const tokenAddress = platform?.contractAddress;
+      const explorerUrl =
+        platform?.contractExplorerUrl ??
+        detail.data?.urls?.explorer?.find((url) =>
+          this.extractEthereumTokenAddress(url),
+        );
+      const tokenAddress =
+        platform?.contractAddress ??
+        (explorerUrl ? this.extractEthereumTokenAddress(explorerUrl) : null);
 
       if (tokenAddress) {
         return {

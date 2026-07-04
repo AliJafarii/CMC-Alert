@@ -117,6 +117,12 @@ export class CmcPollerService implements OnModuleInit {
         continue;
       }
 
+      if (await this.priceAnomalyService.isAnomalous(coin)) {
+        suppressedCount += 1;
+        suppressed.push(this.describeCoin(coin));
+        continue;
+      }
+
       try {
         const marketValidation =
           await this.dexMarketValidationService.isValidMarketMove(coin);
@@ -129,12 +135,6 @@ export class CmcPollerService implements OnModuleInit {
           suppressed.push(
             `${this.describeCoin(coin)} invalid=${marketValidation.reason}`,
           );
-          continue;
-        }
-
-        if (await this.priceAnomalyService.isAnomalous(coin)) {
-          suppressedCount += 1;
-          suppressed.push(this.describeCoin(coin));
           continue;
         }
 

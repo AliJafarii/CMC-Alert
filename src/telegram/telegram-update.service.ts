@@ -249,7 +249,7 @@ export class TelegramUpdateService implements OnModuleInit {
           `منبع: ${entry.source ?? "n/a"}`,
           `شناسه: ${entry.coinId ?? "n/a"}`,
           `اسلاگ: ${entry.slug ?? "n/a"}`,
-          `زمان بررسی: ${entry.checkedAt ?? "n/a"}`,
+          `زمان بررسی: ${this.formatAnomalyCheckedAt(entry.checkedAt)}`,
           `دلیل: ${entry.reason ?? "n/a"}`,
           `لینک: ${this.getAnomalyUrl(entry)}`,
         ].join("\n"),
@@ -283,6 +283,28 @@ export class TelegramUpdateService implements OnModuleInit {
         },
       ),
     );
+  }
+
+  private formatAnomalyCheckedAt(value?: string): string {
+    if (!value) {
+      return "نامشخص";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    const formatted = new Intl.DateTimeFormat("fa-IR", {
+      dateStyle: "short",
+      timeStyle: "medium",
+      timeZone: "Asia/Tehran",
+    })
+      .format(date)
+      .replace(/,/g, "،");
+
+    return `${formatted}، تهران`;
   }
 
   private async sendLongText(chatId: string, text: string): Promise<void> {

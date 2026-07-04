@@ -63,7 +63,10 @@ export class TelegramNotifierService {
     return sentCount > 0;
   }
 
-  private formatPriceDropAlert(alert: PriceDropAlert, extraText?: string): string {
+  private formatPriceDropAlert(
+    alert: PriceDropAlert,
+    extraText?: string,
+  ): string {
     const { coin, quote, thresholdPercent } = alert;
     const change = this.formatPercent(quote.percentChange1h);
     const price = this.formatUsd(quote.price);
@@ -72,7 +75,9 @@ export class TelegramNotifierService {
     const sourceRankLabel = coin.sourceRankLabel ?? "رتبه CMC";
     const sourceUrl =
       coin.sourceUrl ?? `https://coinmarketcap.com/currencies/${coin.slug}/`;
-    const updatedAt = quote.lastUpdated ?? coin.lastUpdated ?? "n/a";
+    const updatedAt = this.formatUpdatedAt(
+      quote.lastUpdated ?? coin.lastUpdated,
+    );
 
     const lines = [
       "هشدار ریزش یک‌ساعته",
@@ -110,6 +115,28 @@ export class TelegramNotifierService {
     }
 
     return `${value.toFixed(2)}%`;
+  }
+
+  private formatUpdatedAt(value: string | undefined): string {
+    if (!value) {
+      return "نامشخص";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    const formatted = new Intl.DateTimeFormat("fa-IR", {
+      dateStyle: "short",
+      timeStyle: "medium",
+      timeZone: "Asia/Tehran",
+    })
+      .format(date)
+      .replace(/,/g, "،");
+
+    return `${formatted}، تهران`;
   }
 
   private formatUsd(value: number): string {

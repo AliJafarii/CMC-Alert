@@ -1,7 +1,13 @@
 import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { firstValueFrom } from "rxjs";
 import { CmcCryptoCurrency } from "./cmc.types";
@@ -301,7 +307,9 @@ export class PriceAnomalyService {
   }
 
   private getMinFlatRatio(): number {
-    return this.getNumber("CMC_ANOMALY_MIN_FLAT_RATIO_PERCENT", 75, 1, 100) / 100;
+    return (
+      this.getNumber("CMC_ANOMALY_MIN_FLAT_RATIO_PERCENT", 75, 1, 100) / 100
+    );
   }
 
   private getFlatMovePercent(): number {
@@ -349,10 +357,13 @@ export class PriceAnomalyService {
 
   private save(): void {
     mkdirSync(dirname(this.statePath), { recursive: true });
+    const tempPath = `${this.statePath}.tmp`;
+
     writeFileSync(
-      this.statePath,
+      tempPath,
       `${JSON.stringify(Object.fromEntries(this.cache), null, 2)}\n`,
       "utf8",
     );
+    renameSync(tempPath, this.statePath);
   }
 }

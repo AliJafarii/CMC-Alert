@@ -1,6 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { TradeSettings } from "./trade-validation.types";
 
@@ -29,11 +35,10 @@ export class TradeSettingsService {
     };
 
     mkdirSync(dirname(this.filePath), { recursive: true });
-    writeFileSync(
-      this.filePath,
-      `${JSON.stringify(settings, null, 2)}\n`,
-      "utf8",
-    );
+    const tempPath = `${this.filePath}.tmp`;
+
+    writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    renameSync(tempPath, this.filePath);
 
     return settings;
   }

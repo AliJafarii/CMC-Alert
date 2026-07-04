@@ -1,5 +1,5 @@
 [Unit]
-Description=Run cmc-alert bot healthcheck every minute
+Description=Run cmc-alert bots healthcheck every minute
 
 [Timer]
 OnBootSec=1min

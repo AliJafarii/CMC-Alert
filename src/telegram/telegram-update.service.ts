@@ -4,7 +4,13 @@ import { ConfigService } from "@nestjs/config";
 import { Cron } from "@nestjs/schedule";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { formatEther, JsonRpcProvider } from "ethers";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { firstValueFrom } from "rxjs";
 import { SubscriberRepositoryService } from "./subscriber-repository.service";
@@ -579,11 +585,10 @@ export class TelegramUpdateService implements OnModuleInit {
 
   private saveTradeSettings(settings: TradeSettingsState): void {
     mkdirSync(dirname(this.tradeSettingsPath), { recursive: true });
-    writeFileSync(
-      this.tradeSettingsPath,
-      `${JSON.stringify(settings, null, 2)}\n`,
-      "utf8",
-    );
+    const tempPath = `${this.tradeSettingsPath}.tmp`;
+
+    writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    renameSync(tempPath, this.tradeSettingsPath);
   }
 
   private formatTradeSettings(settings: TradeSettingsState): string {
@@ -690,10 +695,13 @@ export class TelegramUpdateService implements OnModuleInit {
 
   private saveOffset(): void {
     mkdirSync(dirname(this.statePath), { recursive: true });
+    const tempPath = `${this.statePath}.tmp`;
+
     writeFileSync(
-      this.statePath,
+      tempPath,
       `${JSON.stringify({ offset: this.offset }, null, 2)}\n`,
       "utf8",
     );
+    renameSync(tempPath, this.statePath);
   }
 }

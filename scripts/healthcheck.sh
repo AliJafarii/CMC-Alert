@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-state_dir="/var/lib/cmc-alert-health"
-last_report_file="$state_dir/last-hourly-report"
-mkdir -p "$state_dir"
-
 services=(
   "cmc-alert.service|عملیاتی|/root/cmc-alert/.env"
   "cmc-alert-test.service|تست|/root/cmc-alert-test/.env"
 )
 
-now="$(date +%s)"
 host="$(hostname)"
 restarted=()
 statuses=()
@@ -97,22 +92,4 @@ if ((${#restarted[@]})); then
   done
 
   send_telegram "$message"
-fi
-
-last_report=0
-if [[ -f "$last_report_file" ]]; then
-  last_report="$(cat "$last_report_file" 2>/dev/null || echo 0)"
-fi
-
-if ((now - last_report >= 3600)); then
-  message=$'گزارش ساعتی سلامت بات‌های CMC\n\n'
-  message+="میزبان: ${host}"$'\n'
-  message+="زمان: $(TZ=Asia/Tehran date '+%Y-%m-%d %H:%M:%S %Z')"$'\n\n'
-
-  for line in "${statuses[@]}"; do
-    message+="${line}"$'\n'
-  done
-
-  send_telegram "$message"
-  printf '%s\n' "$now" >"$last_report_file"
 fi

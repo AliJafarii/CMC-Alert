@@ -5,11 +5,16 @@ import { AlertStateService } from "./alert-state.service";
 import { CmcService } from "./cmc.service";
 import { CmcCryptoCurrency } from "./cmc.types";
 import { CoinGeckoService } from "./coingecko.service";
+import { PriceAnomalyService } from "./price-anomaly.service";
 import { PriceAlertService } from "./price-alert.service";
 
 interface ProcessCoinsResult {
   alertCount: number;
   alerts: string[];
+  cooldownSuppressedCount: number;
+  suspicious: string[];
+  suppressed: string[];
+  suppressedCount: number;
 }
 
 @Injectable()
@@ -21,6 +26,7 @@ export class CmcPollerService implements OnModuleInit {
     private readonly alertStateService: AlertStateService,
     private readonly cmcService: CmcService,
     private readonly coinGeckoService: CoinGeckoService,
+    private readonly priceAnomalyService: PriceAnomalyService,
     private readonly priceAlertService: PriceAlertService,
     private readonly telegramNotifierService: TelegramNotifierService,
   ) {}
@@ -57,6 +63,11 @@ export class CmcPollerService implements OnModuleInit {
       );
       const coinGeckoResult = await this.processCoins(coinGeckoOnlyCoins);
       const totalAlertCount = cmcResult.alertCount + coinGeckoResult.alertCount;
+      const totalCooldownSuppressedCount =
+        cmcResult.cooldownSuppressedCount +
+        coinGeckoResult.cooldownSuppressedCount;
+      const totalSuppressedCount =
+        cmcResult.suppressedCount + coinGeckoResult.suppressedCount;
 
       this.logger.log(
         [
@@ -64,11 +75,27 @@ export class CmcPollerService implements OnModuleInit {
           `Worst CMC: ${this.describeWorstCoin(coins)}.`,
           `Worst CoinGecko: ${this.describeWorstCoin(coinGeckoOnlyCoins)}.`,
           `Sent ${totalAlertCount} new Telegram alerts below ${this.priceAlertService.thresholdPercent}%.`,
+          `Suppressed ${totalCooldownSuppressedCount} cooldown repeats.`,
+          `Suppressed ${totalSuppressedCount} low-quality histories or instruments.`,
         ].join(" "),
       );
 
       for (const alert of [...cmcResult.alerts, ...coinGeckoResult.alerts]) {
         this.logger.log(`Alert sent: ${alert}`);
+      }
+
+      for (const suppressed of [
+        ...cmcResult.suppressed,
+        ...coinGeckoResult.suppressed,
+      ]) {
+        this.logger.warn(`Alert suppressed: ${suppressed}`);
+      }
+
+      for (const suspicious of [
+        ...cmcResult.suspicious,
+        ...coinGeckoResult.suspicious,
+      ]) {
+        this.logger.warn(`Anomaly tolerated: ${suspicious}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -83,6 +110,10 @@ export class CmcPollerService implements OnModuleInit {
   ): Promise<ProcessCoinsResult> {
     let alertCount = 0;
     const alerts: string[] = [];
+    let cooldownSuppressedCount = 0;
+    const suspicious: string[] = [];
+    let suppressedCount = 0;
+    const suppressed: string[] = [];
 
     for (const coin of coins) {
       const alert = this.priceAlertService.createDropAlert(coin);
@@ -95,8 +126,29 @@ export class CmcPollerService implements OnModuleInit {
         continue;
       }
 
+      if (this.alertStateService.isCoolingDown(coin)) {
+        cooldownSuppressedCount += 1;
+        continue;
+      }
+
       if (this.alertStateService.isActive(coin)) {
         continue;
+      }
+
+      if (this.isUnsupportedInstrument(coin)) {
+        suppressedCount += 1;
+        suppressed.push(`unsupported instrument ${this.describeCoin(coin)}`);
+        continue;
+      }
+
+      if (await this.priceAnomalyService.isAnomalous(coin)) {
+        if (!this.isLiquidEnoughToTolerateAnomaly(coin)) {
+          suppressedCount += 1;
+          suppressed.push(`anomalous history ${this.describeCoin(coin)}`);
+          continue;
+        }
+
+        suspicious.push(this.describeCoin(coin));
       }
 
       try {
@@ -119,7 +171,40 @@ export class CmcPollerService implements OnModuleInit {
     return {
       alertCount,
       alerts,
+      cooldownSuppressedCount,
+      suspicious,
+      suppressed,
+      suppressedCount,
     };
+  }
+
+  private isLiquidEnoughToTolerateAnomaly(coin: CmcCryptoCurrency): boolean {
+    const quote = coin.quotes?.[0];
+    const rank = coin.cmcRank;
+
+    return (
+      (rank !== undefined && rank > 0 && rank <= 1000) ||
+      (quote?.marketCap !== undefined && quote.marketCap >= 10_000_000) ||
+      (quote?.volume24h !== undefined && quote.volume24h >= 500_000)
+    );
+  }
+
+  private isUnsupportedInstrument(coin: CmcCryptoCurrency): boolean {
+    const normalizedText = [coin.name, coin.symbol, coin.slug]
+      .join(" ")
+      .toLowerCase();
+    const unsupportedPatterns = [
+      "derivatives",
+      "etf (derivatives)",
+      "robinhood token",
+      "tokenised etf",
+      "tokenized stock",
+      "xstock",
+    ];
+
+    return unsupportedPatterns.some((pattern) =>
+      normalizedText.includes(pattern),
+    );
   }
 
   private createPriorityKeys(coins: CmcCryptoCurrency[]): Set<string> {

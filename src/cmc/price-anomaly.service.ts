@@ -211,12 +211,18 @@ export class PriceAnomalyService {
       stats.drops >= this.getMinDropCount() &&
       stats.pumps >= this.getMinPumpCount();
     const sparseSevereDrop =
+      stats.pointCount >= this.getMinPointCount() &&
       stats.maxDrop <= this.getSparseDropPercent() &&
       stats.nonTinyMoves <= this.getSparseMoveLimit() &&
       stats.flatMoveRatio >= this.getMinFlatRatio();
+    const repeatedExtremeWhipsaw =
+      stats.pointCount >= this.getMinPointCount() &&
+      repeatedDropPump &&
+      stats.maxDrop <= this.getSparseDropPercent() &&
+      stats.maxPump >= this.getExtremePumpPercent();
 
     return {
-      isAnomalous: repeatedDropPump || sparseSevereDrop,
+      isAnomalous: repeatedExtremeWhipsaw || sparseSevereDrop,
       stats,
     };
   }
@@ -281,35 +287,43 @@ export class PriceAnomalyService {
   }
 
   private getMinDropCount(): number {
-    return this.getNumber("CMC_ANOMALY_MIN_DROPS", 2, 1, 20);
+    return this.getNumber("CMC_ANOMALY_MIN_DROPS", 3, 1, 20);
   }
 
   private getMinPumpCount(): number {
-    return this.getNumber("CMC_ANOMALY_MIN_PUMPS", 2, 1, 20);
+    return this.getNumber("CMC_ANOMALY_MIN_PUMPS", 3, 1, 20);
   }
 
   private getMinDropPercent(): number {
-    return -Math.abs(this.getNumber("CMC_ANOMALY_DROP_PERCENT", 50, 1, 99));
+    return -Math.abs(this.getNumber("CMC_ANOMALY_DROP_PERCENT", 80, 1, 99));
   }
 
   private getMinPumpPercent(): number {
-    return this.getNumber("CMC_ANOMALY_PUMP_PERCENT", 100, 1, 10000);
+    return this.getNumber("CMC_ANOMALY_PUMP_PERCENT", 300, 1, 10000);
   }
 
   private getSparseDropPercent(): number {
     return -Math.abs(
-      this.getNumber("CMC_ANOMALY_SPARSE_DROP_PERCENT", 70, 1, 99),
+      this.getNumber("CMC_ANOMALY_SPARSE_DROP_PERCENT", 90, 1, 99),
     );
   }
 
   private getSparseMoveLimit(): number {
-    return this.getNumber("CMC_ANOMALY_SPARSE_MOVE_LIMIT", 10, 1, 100);
+    return this.getNumber("CMC_ANOMALY_SPARSE_MOVE_LIMIT", 5, 1, 100);
   }
 
   private getMinFlatRatio(): number {
     return (
-      this.getNumber("CMC_ANOMALY_MIN_FLAT_RATIO_PERCENT", 75, 1, 100) / 100
+      this.getNumber("CMC_ANOMALY_MIN_FLAT_RATIO_PERCENT", 95, 1, 100) / 100
     );
+  }
+
+  private getMinPointCount(): number {
+    return this.getNumber("CMC_ANOMALY_MIN_POINTS", 100, 1, 2000);
+  }
+
+  private getExtremePumpPercent(): number {
+    return this.getNumber("CMC_ANOMALY_EXTREME_PUMP_PERCENT", 500, 1, 1000000);
   }
 
   private getFlatMovePercent(): number {
